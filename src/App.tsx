@@ -1,0 +1,590 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect } from 'react';
+import confetti from 'canvas-confetti';
+import {
+  StartupIntake,
+  SlideData,
+  PitchProject,
+  PitchVersion,
+} from './types/pitch';
+import {
+  getStoredProjects,
+  saveProject as saveLocalProject,
+  deleteProject as deleteLocalProject,
+} from './services/storage';
+import {
+  analyzeStartupApi,
+  generatePitchApi,
+  scorePitchApi,
+  critiquePitchApi,
+  improvePitchApi,
+} from './services/apiClient';
+import {
+  subscribeUserProjects,
+  saveProjectToFirestore,
+  deleteProjectFromFirestore,
+} from './services/firestoreService';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+
+import { Navbar } from './components/Navbar';
+import { WorkflowProgress } from './components/WorkflowProgress';
+import { DashboardView } from './components/DashboardView';
+import { IntakeFormView } from './components/IntakeFormView';
+import { AnalysisCardView } from './components/AnalysisCardView';
+import { PitchDeckStudio } from './components/PitchDeckStudio';
+import { QualityScoreView } from './components/QualityScoreView';
+import { InvestorCritiqueView } from './components/InvestorCritiqueView';
+import { PresentationMode } from './components/PresentationMode';
+import { VersionHistoryModal } from './components/VersionHistoryModal';
+import { ExportModal } from './components/ExportModal';
+import { SettingsModal } from './components/SettingsModal';
+
+function AppContent() {
+  const { user } = useAuth();
+  const [projects, setProjects] = useState<PitchProject[]>([]);
+  const [activeProject, setActiveProject] = useState<PitchProject | null>(null);
+
+  const [currentView, setCurrentView] = useState<
+    'dashboard' | 'intake' | 'analysis' | 'studio' | 'score' | 'critique'
+  >('dashboard');
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Modals
+  const [showSettings, setShowSettings] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [showPresentation, setShowPresentation] = useState(false);
+
+  // Synchronize projects with Firestore or LocalStorage
+  useEffect(() => {
+    if (user) {
+      const unsubscribe = subscribeUserProjects(user.uid, (firestoreProjects) => {
+        setProjects(firestoreProjects);
+        if (firestoreProjects.length > 0) {
+          setActiveProject((prev) => {
+            if (!prev) return firestoreProjects[0];
+            const updated = firestoreProjects.find((p) => p.id === prev.id);
+            return updated || firestoreProjects[0];
+          });
+        }
+      });
+      return () => unsubscribe();
+    } else {
+      const local = getStoredProjects();
+      setProjects(local);
+      if (local.length > 0) {
+        setActiveProject(local[0]);
+      }
+    }
+  }, [user]);
+
+  // Unified save handler (Firestore + Local)
+  const persistProject = async (project: PitchProject) => {
+    saveLocalProject(project);
+    if (user) {
+      try {
+        await saveProjectToFirestore(project, user.uid, user.email);
+      } catch (err: any) {
+        console.error('Failed to sync project to Firestore:', err);
+      }
+    }
+  };
+
+  // Helper to calculate workflow step index (0 to 7)
+  const getWorkflowStepIndex = (): number => {
+    if (currentView === 'intake') return 0;
+    if (currentView === 'analysis') return 1;
+    if (currentView === 'studio') return 4;
+    if (currentView === 'score') return 7;
+    if (currentView === 'critique') return 5;
+    if (activeProject) {
+      if (activeProject.status === 'refined') return 7;
+      if (activeProject.status === 'critiqued') return 6;
+      if (activeProject.status === 'generated') return 4;
+      if (activeProject.status === 'analyzed') return 1;
+    }
+    return 0;
+  };
+
+  const handleStepClick = (stepIndex: number) => {
+    if (!activeProject) return;
+    if (stepIndex === 0) setCurrentView('intake');
+    else if (stepIndex === 1 || stepIndex === 2) {
+      if (activeProject.analysis) setCurrentView('analysis');
+      else setCurrentView('intake');
+    } else if (stepIndex === 3 || stepIndex === 4) {
+      if (activeProject.slides.length > 0) setCurrentView('studio');
+      else setCurrentView('analysis');
+    } else if (stepIndex === 5) {
+      if (activeProject.critique) setCurrentView('critique');
+      else if (activeProject.slides.length > 0) handleCritiquePitch();
+    } else if (stepIndex === 6 || stepIndex === 7) {
+      if (activeProject.score) setCurrentView('score');
+      else if (activeProject.slides.length > 0) handleScorePitch();
+    }
+  };
+
+  // 1. Start Analysis
+  const handleAnalyzeIntake = async (intake: StartupIntake) => {
+    setIsLoading(true);
+    setLoadingStep('Analyzing problem, ICP & business model with Gemini...');
+    setErrorMessage(null);
+
+    try {
+      const analysis = await analyzeStartupApi(intake);
+
+      const projectId = activeProject?.id || `proj-${Date.now()}`;
+      const updatedProject: PitchProject = {
+        id: projectId,
+        createdAt: activeProject?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        intake,
+        analysis,
+        slides: activeProject?.slides || [],
+        currentVersion: activeProject?.currentVersion || 1,
+        versions: activeProject?.versions || [],
+        score: activeProject?.score,
+        critique: activeProject?.critique,
+        status: 'analyzed',
+      };
+
+      await persistProject(updatedProject);
+      setActiveProject(updatedProject);
+      if (!user) setProjects(getStoredProjects());
+      setCurrentView('analysis');
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to analyze startup idea.');
+    } finally {
+      setIsLoading(false);
+      setLoadingStep('');
+    }
+  };
+
+  // 2. Generate 10-Slide Pitch Deck
+  const handleGeneratePitch = async () => {
+    if (!activeProject) return;
+    setIsLoading(true);
+    setLoadingStep('Constructing 10-slide investor narrative with Gemini...');
+    setErrorMessage(null);
+
+    try {
+      const slides = await generatePitchApi(
+        activeProject.intake,
+        activeProject.analysis
+      );
+
+      // Score the initial generation
+      setLoadingStep('Evaluating pitch against VC investment committee rubric...');
+      const score = await scorePitchApi(activeProject.intake, slides, activeProject.analysis);
+
+      // Create snapshot version 1
+      const version1: PitchVersion = {
+        versionId: `v1-${Date.now()}`,
+        versionNumber: 1,
+        createdAt: new Date().toISOString(),
+        note: 'Initial 10-Slide Generation from Gemini',
+        slides,
+        score,
+        analysis: activeProject.analysis,
+      };
+
+      const updatedProject: PitchProject = {
+        ...activeProject,
+        slides,
+        score,
+        currentVersion: 1,
+        versions: [version1],
+        status: 'generated',
+        updatedAt: new Date().toISOString(),
+      };
+
+      await persistProject(updatedProject);
+      setActiveProject(updatedProject);
+      if (!user) setProjects(getStoredProjects());
+      setCurrentView('studio');
+
+      confetti({
+        particleCount: 60,
+        spread: 60,
+        origin: { y: 0.6 },
+      });
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to generate 10-slide pitch.');
+    } finally {
+      setIsLoading(false);
+      setLoadingStep('');
+    }
+  };
+
+  // 3. Score Pitch Deck
+  const handleScorePitch = async () => {
+    if (!activeProject || activeProject.slides.length === 0) return;
+    setIsLoading(true);
+    setLoadingStep('Scoring pitch deck across 8 investment categories...');
+    setErrorMessage(null);
+
+    try {
+      const score = await scorePitchApi(
+        activeProject.intake,
+        activeProject.slides,
+        activeProject.analysis
+      );
+
+      const updatedProject: PitchProject = {
+        ...activeProject,
+        score,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await persistProject(updatedProject);
+      setActiveProject(updatedProject);
+      if (!user) setProjects(getStoredProjects());
+      setCurrentView('score');
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to score pitch deck.');
+    } finally {
+      setIsLoading(false);
+      setLoadingStep('');
+    }
+  };
+
+  // 4. Run AI Investor Critique
+  const handleCritiquePitch = async () => {
+    if (!activeProject || activeProject.slides.length === 0) return;
+    setIsLoading(true);
+    setLoadingStep('Simulating 60-second VC partner pitch evaluation...');
+    setErrorMessage(null);
+
+    try {
+      const critique = await critiquePitchApi(activeProject.intake, activeProject.slides);
+
+      const updatedProject: PitchProject = {
+        ...activeProject,
+        critique,
+        status: 'critiqued',
+        updatedAt: new Date().toISOString(),
+      };
+
+      await persistProject(updatedProject);
+      setActiveProject(updatedProject);
+      if (!user) setProjects(getStoredProjects());
+      setCurrentView('critique');
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to run investor critique.');
+    } finally {
+      setIsLoading(false);
+      setLoadingStep('');
+    }
+  };
+
+  // 5. Improve My Pitch (Full Multi-Slide Refinement)
+  const handleImprovePitch = async () => {
+    if (!activeProject || !activeProject.critique) return;
+    setIsLoading(true);
+    setLoadingStep('Revising 10 slides to resolve VC critique & unanswered questions...');
+    setErrorMessage(null);
+
+    try {
+      const { improvedSlides, improvementLog } = await improvePitchApi(
+        activeProject.intake,
+        activeProject.slides,
+        activeProject.critique
+      );
+
+      // Re-score the improved pitch
+      setLoadingStep('Re-evaluating revised pitch quality score...');
+      const newScore = await scorePitchApi(
+        activeProject.intake,
+        improvedSlides,
+        activeProject.analysis
+      );
+
+      const nextVersionNum = activeProject.currentVersion + 1;
+      const newVersion: PitchVersion = {
+        versionId: `v${nextVersionNum}-${Date.now()}`,
+        versionNumber: nextVersionNum,
+        createdAt: new Date().toISOString(),
+        note: `AI Investor Critique Refinements: ${improvementLog[0] || 'Clarified narrative arc'}`,
+        slides: improvedSlides,
+        score: newScore,
+        critique: activeProject.critique,
+        analysis: activeProject.analysis,
+      };
+
+      const updatedProject: PitchProject = {
+        ...activeProject,
+        slides: improvedSlides,
+        score: newScore,
+        currentVersion: nextVersionNum,
+        versions: [...activeProject.versions, newVersion],
+        status: 'refined',
+        updatedAt: new Date().toISOString(),
+      };
+
+      await persistProject(updatedProject);
+      setActiveProject(updatedProject);
+      if (!user) setProjects(getStoredProjects());
+      setCurrentView('score');
+
+      // Score improvement celebration
+      confetti({
+        particleCount: 100,
+        spread: 80,
+        origin: { y: 0.6 },
+      });
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to refine pitch deck.');
+    } finally {
+      setIsLoading(false);
+      setLoadingStep('');
+    }
+  };
+
+  // 6. Update Slides from Studio
+  const handleUpdateSlides = async (updatedSlides: SlideData[], versionNote?: string) => {
+    if (!activeProject) return;
+
+    let versions = activeProject.versions;
+    let versionNum = activeProject.currentVersion;
+
+    if (versionNote) {
+      versionNum += 1;
+      const newVersion: PitchVersion = {
+        versionId: `v${versionNum}-${Date.now()}`,
+        versionNumber: versionNum,
+        createdAt: new Date().toISOString(),
+        note: versionNote,
+        slides: updatedSlides,
+        score: activeProject.score,
+        analysis: activeProject.analysis,
+      };
+      versions = [...versions, newVersion];
+    }
+
+    const updatedProject: PitchProject = {
+      ...activeProject,
+      slides: updatedSlides,
+      currentVersion: versionNum,
+      versions,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await persistProject(updatedProject);
+    setActiveProject(updatedProject);
+    if (!user) setProjects(getStoredProjects());
+  };
+
+  // 7. Restore Version
+  const handleRestoreVersion = async (version: PitchVersion) => {
+    if (!activeProject) return;
+
+    const nextVer = activeProject.currentVersion + 1;
+    const restoredVersion: PitchVersion = {
+      versionId: `v${nextVer}-${Date.now()}`,
+      versionNumber: nextVer,
+      createdAt: new Date().toISOString(),
+      note: `Restored from Version ${version.versionNumber}`,
+      slides: version.slides,
+      score: version.score || activeProject.score,
+      critique: version.critique || activeProject.critique,
+      analysis: version.analysis || activeProject.analysis,
+    };
+
+    const updatedProject: PitchProject = {
+      ...activeProject,
+      slides: version.slides,
+      score: version.score || activeProject.score,
+      currentVersion: nextVer,
+      versions: [...activeProject.versions, restoredVersion],
+      updatedAt: new Date().toISOString(),
+    };
+
+    await persistProject(updatedProject);
+    setActiveProject(updatedProject);
+    if (!user) setProjects(getStoredProjects());
+    setCurrentView('studio');
+  };
+
+  // 8. Reset all data
+  const handleResetData = () => {
+    localStorage.clear();
+    setProjects([]);
+    setActiveProject(null);
+    setCurrentView('dashboard');
+  };
+
+  const handleDeleteProject = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    deleteLocalProject(id);
+    if (user) {
+      try {
+        await deleteProjectFromFirestore(id);
+      } catch (err) {
+        console.error('Failed to delete from Firestore:', err);
+      }
+    } else {
+      const remaining = getStoredProjects();
+      setProjects(remaining);
+      if (activeProject?.id === id) {
+        setActiveProject(remaining.length > 0 ? remaining[0] : null);
+      }
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans antialiased selection:bg-amber-500 selection:text-zinc-950">
+      {/* Top Navigation */}
+      <Navbar
+        currentView={currentView}
+        setCurrentView={setCurrentView}
+        activeProject={activeProject}
+        onOpenSettings={() => setShowSettings(true)}
+        onOpenPresentation={() => setShowPresentation(true)}
+      />
+
+      {/* Workflow Progress Indicator */}
+      {currentView !== 'dashboard' && (
+        <WorkflowProgress
+          currentStepIndex={getWorkflowStepIndex()}
+          onStepClick={handleStepClick}
+          project={activeProject}
+        />
+      )}
+
+      {/* Global Error Banner */}
+      {errorMessage && (
+        <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6">
+          <div className="flex items-center justify-between rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-300">
+            <span>⚠️ {errorMessage}</span>
+            <button
+              onClick={() => setErrorMessage(null)}
+              className="text-rose-400 hover:text-white font-bold cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main View Router */}
+      <main className="flex-1">
+        {currentView === 'dashboard' && (
+          <DashboardView
+            projects={projects}
+            onNewPitch={() => {
+              setActiveProject(null);
+              setCurrentView('intake');
+            }}
+            onOpenProject={(proj) => {
+              setActiveProject(proj);
+              if (proj.slides.length > 0) setCurrentView('studio');
+              else if (proj.analysis) setCurrentView('analysis');
+              else setCurrentView('intake');
+            }}
+            onDeleteProject={handleDeleteProject}
+          />
+        )}
+
+        {currentView === 'intake' && (
+          <IntakeFormView
+            initialIntake={activeProject?.intake}
+            onAnalyze={handleAnalyzeIntake}
+            isLoading={isLoading}
+            loadingStep={loadingStep}
+          />
+        )}
+
+        {currentView === 'analysis' && activeProject?.analysis && (
+          <AnalysisCardView
+            analysis={activeProject.analysis}
+            intake={activeProject.intake}
+            onGeneratePitch={handleGeneratePitch}
+            onReanalyze={() => handleAnalyzeIntake(activeProject.intake)}
+            isLoading={isLoading}
+            loadingStep={loadingStep}
+          />
+        )}
+
+        {currentView === 'studio' && activeProject && (
+          <PitchDeckStudio
+            project={activeProject}
+            onUpdateSlides={handleUpdateSlides}
+            onScorePitch={handleScorePitch}
+            onOpenCritique={handleCritiquePitch}
+            onOpenHistory={() => setShowHistory(true)}
+            onOpenExport={() => setShowExport(true)}
+            onOpenPresentation={() => setShowPresentation(true)}
+            isLoadingScore={isLoading && loadingStep.includes('Scoring')}
+            isLoadingCritique={isLoading && loadingStep.includes('VC')}
+          />
+        )}
+
+        {currentView === 'score' && activeProject?.score && (
+          <QualityScoreView
+            score={activeProject.score}
+            project={activeProject}
+            onOpenCritique={handleCritiquePitch}
+            onOpenStudio={() => setCurrentView('studio')}
+            onOpenHistory={() => setShowHistory(true)}
+          />
+        )}
+
+        {currentView === 'critique' && activeProject?.critique && (
+          <InvestorCritiqueView
+            critique={activeProject.critique}
+            project={activeProject}
+            onImprovePitch={handleImprovePitch}
+            onOpenStudio={() => setCurrentView('studio')}
+            onOpenScore={() => setCurrentView('score')}
+            isImproving={isLoading && loadingStep.includes('Revising')}
+          />
+        )}
+      </main>
+
+      {/* Modals */}
+      {showSettings && (
+        <SettingsModal
+          onClose={() => setShowSettings(false)}
+          onResetData={handleResetData}
+        />
+      )}
+
+      {showHistory && activeProject && (
+        <VersionHistoryModal
+          project={activeProject}
+          onRestoreVersion={handleRestoreVersion}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
+
+      {showExport && activeProject && (
+        <ExportModal
+          project={activeProject}
+          onClose={() => setShowExport(false)}
+        />
+      )}
+
+      {showPresentation && activeProject && (
+        <PresentationMode
+          project={activeProject}
+          onClose={() => setShowPresentation(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}

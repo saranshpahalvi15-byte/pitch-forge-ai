@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+  
+  code, pre, kbd {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(24, 24, 27, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(63, 63, 70, 0.6);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(113, 113, 122, 0.8);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Print styles for PDF / deck printing */
+@media print {
+  body {
+    background-color: white !important;
+    color: black !important;
+  }
+  header, nav, button, .no-print {
+    display: none !important;
+  }
+  .print-page-break {
+    page-break-after: always;
+  }
+}
