@@ -1,10 +1,12 @@
-import { PitchProject, StartupIntake } from '../types/pitch';
+import { PitchProject } from '../types/pitch';
 
-const STORAGE_KEY_PROJECTS = 'pitchforge_projects';
+const getStorageKey = (userId?: string | null) =>
+  userId ? `pitchforge_projects_${userId}` : 'pitchforge_guest_projects';
 
-export function getStoredProjects(): PitchProject[] {
+export function getStoredProjects(userId?: string | null): PitchProject[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_PROJECTS);
+    const key = getStorageKey(userId);
+    const raw = localStorage.getItem(key);
     if (!raw) return [];
     return JSON.parse(raw);
   } catch (e) {
@@ -13,10 +15,11 @@ export function getStoredProjects(): PitchProject[] {
   }
 }
 
-export function saveProject(project: PitchProject): void {
+export function saveProject(project: PitchProject, userId?: string | null): void {
   try {
-    const projects = getStoredProjects();
-    const existingIndex = projects.findIndex(p => p.id === project.id);
+    const key = getStorageKey(userId);
+    const projects = getStoredProjects(userId);
+    const existingIndex = projects.findIndex((p) => p.id === project.id);
     if (existingIndex >= 0) {
       projects[existingIndex] = {
         ...project,
@@ -25,18 +28,18 @@ export function saveProject(project: PitchProject): void {
     } else {
       projects.unshift(project);
     }
-    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
+    localStorage.setItem(key, JSON.stringify(projects));
   } catch (e) {
     console.error('Failed to save project:', e);
   }
 }
 
-export function deleteProject(id: string): void {
+export function deleteProject(id: string, userId?: string | null): void {
   try {
-    const projects = getStoredProjects().filter(p => p.id !== id);
-    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
+    const key = getStorageKey(userId);
+    const projects = getStoredProjects(userId).filter((p) => p.id !== id);
+    localStorage.setItem(key, JSON.stringify(projects));
   } catch (e) {
     console.error('Failed to delete project:', e);
   }
 }
-

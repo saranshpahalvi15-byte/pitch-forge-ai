@@ -19,6 +19,7 @@ interface NavbarProps {
   currentView: 'dashboard' | 'intake' | 'analysis' | 'studio' | 'score' | 'critique';
   setCurrentView: (view: 'dashboard' | 'intake' | 'analysis' | 'studio' | 'score' | 'critique') => void;
   activeProject: PitchProject | null;
+  onNewPitch: () => void;
   onOpenSettings: () => void;
   onOpenPresentation: () => void;
 }
@@ -27,6 +28,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentView,
   setCurrentView,
   activeProject,
+  onNewPitch,
   onOpenSettings,
   onOpenPresentation,
 }) => {
@@ -37,9 +39,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   const handleSignIn = async () => {
     setAuthError(null);
     try {
-      await signInWithGoogle();
+      const res = await signInWithGoogle();
+      if (!res.success && !res.cancelled && res.error) {
+        setAuthError(res.error);
+      }
     } catch (err: any) {
-      setAuthError(err.message || 'Failed to sign in with Google');
+      if (err?.code !== 'auth/popup-closed-by-user' && err?.code !== 'auth/cancelled-popup-request') {
+        setAuthError(err.message || 'Failed to sign in with Google');
+      }
     }
   };
 
@@ -74,17 +81,19 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Navigation Links */}
           <nav className="hidden md:flex items-center gap-1">
-            <button
-              onClick={() => setCurrentView('dashboard')}
-              className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all cursor-pointer ${
-                currentView === 'dashboard'
-                  ? 'bg-zinc-800 text-white shadow-sm'
-                  : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
-              }`}
-            >
-              <LayoutDashboard className="h-4 w-4" />
-              Dashboard
-            </button>
+            {user && !isAnonymous && (
+              <button
+                onClick={() => setCurrentView('dashboard')}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all cursor-pointer ${
+                  currentView === 'dashboard'
+                    ? 'bg-zinc-800 text-white shadow-sm'
+                    : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
+                }`}
+              >
+                <LayoutDashboard className="h-4 w-4" />
+                Dashboard
+              </button>
+            )}
 
             {activeProject && (
               <button
@@ -116,7 +125,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* New Pitch CTA */}
           <button
-            onClick={() => setCurrentView('intake')}
+            onClick={onNewPitch}
             className="flex items-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold px-3.5 py-1.5 text-xs transition-all shadow-md shadow-amber-500/20 active:scale-95 cursor-pointer"
           >
             + New Pitch

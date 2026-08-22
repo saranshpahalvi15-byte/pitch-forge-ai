@@ -201,29 +201,6 @@ export const PitchDeckStudio: React.FC<PitchDeckStudioProps> = ({
             </span>
           </button>
 
-          {/* AI Critique Button */}
-          <button
-            onClick={onOpenCritique}
-            disabled={isLoadingCritique}
-            className="flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-2 text-xs font-semibold text-rose-300 transition-all active:scale-95"
-          >
-            {isLoadingCritique ? (
-              <RefreshCw className="h-4 w-4 animate-spin text-rose-400" />
-            ) : (
-              <ShieldAlert className="h-4 w-4 text-rose-400" />
-            )}
-            <span>60s VC Review</span>
-          </button>
-
-          {/* Version History */}
-          <button
-            onClick={onOpenHistory}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800/60 hover:bg-zinc-700 px-3 py-2 text-xs font-medium text-zinc-300 transition-colors"
-          >
-            <History className="h-4 w-4 text-zinc-400" />
-            <span className="hidden md:inline">History ({project.versions.length})</span>
-          </button>
-
           {/* Export */}
           <button
             onClick={onOpenExport}
@@ -461,16 +438,6 @@ export const PitchDeckStudio: React.FC<PitchDeckStudioProps> = ({
                 className="w-full flex items-center justify-between rounded-xl border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-700 px-3.5 py-2.5 text-xs font-semibold text-zinc-200 transition-all active:scale-98"
               >
                 <span>⚡ Improve This Slide</span>
-                <ArrowRight className="h-3.5 w-3.5 text-amber-400" />
-              </button>
-
-              <button
-                type="button"
-                disabled={isAiLoading}
-                onClick={() => handleAiAction('concise')}
-                className="w-full flex items-center justify-between rounded-xl border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-700 px-3.5 py-2.5 text-xs font-semibold text-zinc-200 transition-all active:scale-98"
-              >
-                <span>✂️ Make It More Concise</span>
                 <ArrowRight className="h-3.5 w-3.5 text-amber-400" />
               </button>
 

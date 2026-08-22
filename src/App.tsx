@@ -12,7 +12,6 @@ import {
   PitchVersion,
 } from './types/pitch';
 import {
-  getStoredProjects,
   saveProject as saveLocalProject,
   deleteProject as deleteLocalProject,
 } from './services/storage';
@@ -27,7 +26,6 @@ import {
   subscribeUserProjects,
   saveProjectToFirestore,
   deleteProjectFromFirestore,
-  syncLocalProjectsToFirestore,
 } from './services/firestoreService';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
@@ -43,9 +41,11 @@ import { PresentationMode } from './components/PresentationMode';
 import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { ExportModal } from './components/ExportModal';
 import { SettingsModal } from './components/SettingsModal';
+import { AuthModal } from './components/AuthModal';
+import { Footer } from './components/Footer';
 
 function AppContent() {
-  const { user, setSyncStatus } = useAuth();
+  const { user, isAnonymous, setSyncStatus } = useAuth();
   const [projects, setProjects] = useState<PitchProject[]>([]);
   const [activeProject, setActiveProject] = useState<PitchProject | null>(null);
 
@@ -62,23 +62,17 @@ function AppContent() {
   const [showHistory, setShowHistory] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [showPresentation, setShowPresentation] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
-  // Synchronize projects with Firestore and LocalStorage
+  // Synchronize projects strictly for the authenticated user from Firestore
   useEffect(() => {
-    if (user) {
-      // Auto-migrate local drafts to Firestore
-      const local = getStoredProjects();
-      if (local.length > 0) {
-        syncLocalProjectsToFirestore(local, user.uid, user.email).catch((e) =>
-          console.warn('Initial sync notice:', e)
-        );
-      }
-
+    if (user && !isAnonymous) {
       setSyncStatus('syncing');
       const unsubscribe = subscribeUserProjects(
         user.uid,
         (firestoreProjects) => {
           setSyncStatus('synced');
+          // Only show pitches generated and owned by this specific authenticated account
           setProjects(firestoreProjects);
           if (firestoreProjects.length > 0) {
             setActiveProject((prev) => {
@@ -86,26 +80,28 @@ function AppContent() {
               const updated = firestoreProjects.find((p) => p.id === prev.id);
               return updated || firestoreProjects[0];
             });
+          } else {
+            setActiveProject(null);
           }
         },
-        () => {
+        (error) => {
+          console.error('Firestore user projects subscription error:', error);
           setSyncStatus('offline');
         }
       );
       return () => unsubscribe();
     } else {
-      const local = getStoredProjects();
-      setProjects(local);
-      if (local.length > 0) {
-        setActiveProject(local[0]);
-      }
+      // When not signed in, show no private/shared projects
+      setProjects([]);
+      setActiveProject(null);
+      setSyncStatus('idle');
     }
-  }, [user]);
+  }, [user, isAnonymous]);
 
-  // Unified save handler (Firestore + Local)
+  // Unified save handler (Firestore for user + local fallback)
   const persistProject = async (project: PitchProject) => {
-    saveLocalProject(project);
-    if (user) {
+    if (user && !isAnonymous) {
+      saveLocalProject(project, user.uid);
       try {
         setSyncStatus('syncing');
         await saveProjectToFirestore(project, user.uid, user.email);
@@ -114,6 +110,8 @@ function AppContent() {
         console.error('Failed to sync project to Firestore:', err);
         setSyncStatus('error');
       }
+    } else {
+      saveLocalProject(project, null);
     }
   };
 
@@ -177,7 +175,6 @@ function AppContent() {
 
       await persistProject(updatedProject);
       setActiveProject(updatedProject);
-      if (!user) setProjects(getStoredProjects());
       setCurrentView('analysis');
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to analyze startup idea.');
@@ -227,7 +224,6 @@ function AppContent() {
 
       await persistProject(updatedProject);
       setActiveProject(updatedProject);
-      if (!user) setProjects(getStoredProjects());
       setCurrentView('studio');
 
       confetti({
@@ -265,7 +261,6 @@ function AppContent() {
 
       await persistProject(updatedProject);
       setActiveProject(updatedProject);
-      if (!user) setProjects(getStoredProjects());
       setCurrentView('score');
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to score pitch deck.');
@@ -294,7 +289,6 @@ function AppContent() {
 
       await persistProject(updatedProject);
       setActiveProject(updatedProject);
-      if (!user) setProjects(getStoredProjects());
       setCurrentView('critique');
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to run investor critique.');
@@ -350,7 +344,6 @@ function AppContent() {
 
       await persistProject(updatedProject);
       setActiveProject(updatedProject);
-      if (!user) setProjects(getStoredProjects());
       setCurrentView('score');
 
       // Score improvement celebration
@@ -398,7 +391,6 @@ function AppContent() {
 
     await persistProject(updatedProject);
     setActiveProject(updatedProject);
-    if (!user) setProjects(getStoredProjects());
   };
 
   // 7. Restore Version
@@ -428,13 +420,14 @@ function AppContent() {
 
     await persistProject(updatedProject);
     setActiveProject(updatedProject);
-    if (!user) setProjects(getStoredProjects());
     setCurrentView('studio');
   };
 
   // 8. Reset all data
   const handleResetData = () => {
-    localStorage.clear();
+    if (user && !isAnonymous) {
+      deleteLocalProject('', user.uid);
+    }
     setProjects([]);
     setActiveProject(null);
     setCurrentView('dashboard');
@@ -442,19 +435,29 @@ function AppContent() {
 
   const handleDeleteProject = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    deleteLocalProject(id);
-    if (user) {
+    if (user && !isAnonymous) {
+      deleteLocalProject(id, user.uid);
       try {
         await deleteProjectFromFirestore(id);
       } catch (err) {
         console.error('Failed to delete from Firestore:', err);
       }
     } else {
-      const remaining = getStoredProjects();
-      setProjects(remaining);
+      deleteLocalProject(id, null);
+      setProjects((prev) => prev.filter((p) => p.id !== id));
       if (activeProject?.id === id) {
-        setActiveProject(remaining.length > 0 ? remaining[0] : null);
+        setActiveProject(null);
       }
+    }
+  };
+
+  // Intercept New Pitch requests with Google Sign-in prompt
+  const handleRequestNewPitch = () => {
+    if (user && !isAnonymous) {
+      setActiveProject(null);
+      setCurrentView('intake');
+    } else {
+      setShowAuthModal(true);
     }
   };
 
@@ -465,6 +468,7 @@ function AppContent() {
         currentView={currentView}
         setCurrentView={setCurrentView}
         activeProject={activeProject}
+        onNewPitch={handleRequestNewPitch}
         onOpenSettings={() => setShowSettings(true)}
         onOpenPresentation={() => setShowPresentation(true)}
       />
@@ -498,10 +502,7 @@ function AppContent() {
         {currentView === 'dashboard' && (
           <DashboardView
             projects={projects}
-            onNewPitch={() => {
-              setActiveProject(null);
-              setCurrentView('intake');
-            }}
+            onNewPitch={handleRequestNewPitch}
             onOpenProject={(proj) => {
               setActiveProject(proj);
               if (proj.slides.length > 0) setCurrentView('studio');
@@ -568,6 +569,15 @@ function AppContent() {
         )}
       </main>
 
+      {!showPresentation && (
+        <Footer
+          onNavigate={(view) => setCurrentView(view)}
+          onNewPitch={handleRequestNewPitch}
+          onOpenSettings={() => setShowSettings(true)}
+          hasActiveProject={Boolean(activeProject)}
+        />
+      )}
+
       {/* Modals */}
       {showSettings && (
         <SettingsModal
@@ -595,6 +605,17 @@ function AppContent() {
         <PresentationMode
           project={activeProject}
           onClose={() => setShowPresentation(false)}
+        />
+      )}
+
+      {showAuthModal && (
+        <AuthModal
+          isOpen={showAuthModal}
+          onClose={() => setShowAuthModal(false)}
+          onSuccess={() => {
+            setActiveProject(null);
+            setCurrentView('intake');
+          }}
         />
       )}
     </div>

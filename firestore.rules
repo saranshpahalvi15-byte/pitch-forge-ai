@@ -18,7 +18,7 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() > 0 && id.size() <= 128;
     }
 
     function incoming() {
@@ -41,31 +41,30 @@ service cloud.firestore {
         && data.versions is list && data.versions.size() <= 100
         && data.createdAt is string && data.createdAt.size() <= 64
         && data.updatedAt is string && data.updatedAt.size() <= 64
-        && (!('ownerEmail' in data) || (data.ownerEmail is string && data.ownerEmail.size() <= 256))
-        && (!('analysis' in data) || data.analysis is map)
-        && (!('score' in data) || data.score is map)
-        && (!('critique' in data) || data.critique is map);
+        && (!('ownerEmail' in data) || data.ownerEmail == null || (data.ownerEmail is string && data.ownerEmail.size() <= 256))
+        && (!('analysis' in data) || data.analysis == null || data.analysis is map)
+        && (!('score' in data) || data.score == null || data.score is map)
+        && (!('critique' in data) || data.critique == null || data.critique is map);
     }
 
     // Projects collection
     match /projects/{projectId} {
-      allow get: if isOwner(resource.data.ownerId) && isValidId(projectId);
+      allow read: if isSignedIn() && resource.data.ownerId == request.auth.uid;
       
-      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
-      
-      allow create: if isOwner(incoming().ownerId)
+      allow create: if isSignedIn()
         && isValidId(projectId)
         && incoming().id == projectId
+        && incoming().ownerId == request.auth.uid
         && isValidProject(incoming());
         
-      allow update: if isOwner(existing().ownerId)
+      allow update: if isSignedIn()
         && isValidId(projectId)
         && isValidProject(incoming())
-        && incoming().ownerId == existing().ownerId
-        && incoming().id == existing().id
-        && incoming().createdAt == existing().createdAt;
+        && existing().ownerId == request.auth.uid
+        && incoming().ownerId == request.auth.uid
+        && incoming().id == existing().id;
         
-      allow delete: if isOwner(existing().ownerId) && isValidId(projectId);
+      allow delete: if isSignedIn() && existing().ownerId == request.auth.uid && isValidId(projectId);
     }
   }
 }
