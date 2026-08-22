@@ -3,8 +3,6 @@ import {
   Download,
   X,
   FileText,
-  Printer,
-  Copy,
   Check,
   Award,
   Layers,
@@ -12,17 +10,23 @@ import {
   CheckCircle2,
   FileSpreadsheet,
   Settings2,
-  HelpCircle,
   Eye,
   Info,
   FileDown,
   Globe,
   Loader2,
+  Building2,
+  TrendingUp,
+  Target,
+  ShieldAlert,
+  Zap,
 } from 'lucide-react';
 import { PitchProject } from '../types/pitch';
 import {
   downloadPitchDeckPdf,
   downloadStandaloneHtmlPresentation,
+  downloadOnePagerPdf,
+  downloadOnePagerHtml,
 } from '../services/pdfExportService';
 
 interface ExportModalProps {
@@ -31,64 +35,24 @@ interface ExportModalProps {
 }
 
 export const ExportModal: React.FC<ExportModalProps> = ({ project, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'print' | 'markdown' | 'onepager' | 'json'>('print');
-  const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState<'deck' | 'onepager'>('deck');
   const [includeSpeakerNotes, setIncludeSpeakerNotes] = useState(true);
   const [includeScorecard, setIncludeScorecard] = useState(true);
   const [includeVisualGuidance, setIncludeVisualGuidance] = useState(true);
 
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  const [pdfSuccess, setPdfSuccess] = useState(false);
+  // Loading & Success states for Deck
+  const [isGeneratingDeckPdf, setIsGeneratingDeckPdf] = useState(false);
+  const [deckPdfSuccess, setDeckPdfSuccess] = useState(false);
+
+  // Loading & Success states for Memo
+  const [isGeneratingMemoPdf, setIsGeneratingMemoPdf] = useState(false);
+  const [memoPdfSuccess, setMemoPdfSuccess] = useState(false);
+
   const [exportError, setExportError] = useState<string | null>(null);
 
-  // Generate Markdown representation
-  const generateMarkdown = () => {
-    let md = `# ${project.intake.startupName} - Investor Pitch Deck\n`;
-    md += `**Tagline:** ${project.intake.tagline || 'N/A'}\n`;
-    md += `**Stage:** ${project.intake.stage} | **Score:** ${project.score?.overallScore || 'N/A'}/100 (${project.score?.tier || 'Draft'})\n\n`;
-    md += `## 10-Slide Pitch Outline\n\n`;
-
-    project.slides.forEach((s) => {
-      md += `### Slide ${s.slideNumber}: ${s.title} (${s.category.toUpperCase()})\n`;
-      md += `**1-Second Takeaway:** ${s.headline}\n\n`;
-      md += `**Slide Content:**\n`;
-      s.bullets.forEach((b) => {
-        md += `- ${b}\n`;
-      });
-      md += `\n**Key Metrics & Data Points:**\n`;
-      s.keyDataPoints.forEach((dp) => {
-        md += `- ${dp.label}: ${dp.value} [${dp.status.toUpperCase()}]\n`;
-      });
-      if (includeSpeakerNotes) {
-        md += `\n**Speaker Script:**\n> ${s.speakerNotes}\n\n`;
-      }
-      if (includeVisualGuidance) {
-        md += `**Visual Recommendation:** ${s.visualRecommendation.description}\n\n`;
-      }
-      md += `---\n\n`;
-    });
-
-    if (project.critique && includeScorecard) {
-      md += `## AI Investor Review (60-Second Test)\n`;
-      md += `- **Verdict:** ${project.critique.sixtySecondVerdict}\n`;
-      md += `- **Strongest Part:** ${project.critique.strongestPart}\n`;
-      md += `- **Weakest Part:** ${project.critique.weakestPart}\n`;
-      md += `- **Biggest Unanswered Question:** ${project.critique.biggestUnansweredQuestion}\n`;
-      md += `- **Existential Risk:** ${project.critique.biggestInvestmentRisk}\n`;
-    }
-
-    return md;
-  };
-
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  // Direct .PDF File Generation & Download
-  const handleDirectPdfDownload = async () => {
-    setIsGeneratingPdf(true);
+  // 10-Slide Deck PDF Download
+  const handleDownloadDeckPdf = async () => {
+    setIsGeneratingDeckPdf(true);
     setExportError(null);
     try {
       await downloadPitchDeckPdf(project, {
@@ -96,33 +60,49 @@ export const ExportModal: React.FC<ExportModalProps> = ({ project, onClose }) =>
         includeScorecard,
         includeVisualGuidance,
       });
-      setPdfSuccess(true);
-      setTimeout(() => setPdfSuccess(false), 3000);
+      setDeckPdfSuccess(true);
+      setTimeout(() => setDeckPdfSuccess(false), 3000);
     } catch (err: any) {
-      console.error('PDF Generation error:', err);
-      setExportError(err.message || 'Failed to generate PDF. Please try again.');
+      console.error('Deck PDF Generation error:', err);
+      setExportError(err.message || 'Failed to generate slide deck PDF.');
     } finally {
-      setIsGeneratingPdf(false);
+      setIsGeneratingDeckPdf(false);
     }
   };
 
-  // Standalone HTML Presentation Download
-  const handleDownloadHtml = () => {
+  // 10-Slide Deck Standalone HTML Presentation Download
+  const handleDownloadDeckHtml = () => {
     try {
       downloadStandaloneHtmlPresentation(project);
     } catch (err: any) {
-      console.error('HTML Export error:', err);
+      console.error('Deck HTML Export error:', err);
       setExportError(err.message || 'Failed to export HTML presentation.');
     }
   };
 
-  // Browser Print Dialog
-  const handlePrint = () => {
+  // 1-Page Memo PDF Download
+  const handleDownloadMemoPdf = async () => {
+    setIsGeneratingMemoPdf(true);
+    setExportError(null);
     try {
-      window.print();
+      await downloadOnePagerPdf(project);
+      setMemoPdfSuccess(true);
+      setTimeout(() => setMemoPdfSuccess(false), 3000);
     } catch (err: any) {
-      console.warn('Direct print blocked, downloading PDF instead:', err);
-      handleDirectPdfDownload();
+      console.error('Memo PDF Generation error:', err);
+      setExportError(err.message || 'Failed to generate 1-Page Executive Memo PDF.');
+    } finally {
+      setIsGeneratingMemoPdf(false);
+    }
+  };
+
+  // 1-Page Memo Standalone HTML Download
+  const handleDownloadMemoHtml = () => {
+    try {
+      downloadOnePagerHtml(project);
+    } catch (err: any) {
+      console.error('Memo HTML Export error:', err);
+      setExportError(err.message || 'Failed to export 1-Page Memo HTML.');
     }
   };
 
@@ -132,19 +112,27 @@ export const ExportModal: React.FC<ExportModalProps> = ({ project, onClose }) =>
     year: 'numeric',
   });
 
+  const probSlide = project.slides.find((s) => s.category === 'problem');
+  const solSlide = project.slides.find((s) => s.category === 'solution');
+  const marketSlide = project.slides.find((s) => s.category === 'market');
+  const bizSlide = project.slides.find((s) => s.category === 'business_model');
+  const tracSlide = project.slides.find((s) => s.category === 'traction');
+  const compSlide = project.slides.find((s) => s.category === 'competition');
+  const askSlide = project.slides.find((s) => s.category === 'team_ask');
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 print:p-0 print:bg-white print:static">
       <div className="max-w-4xl w-full rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200 print:max-w-none print:w-full print:border-none print:shadow-none print:p-0 print:bg-white">
-        {/* Modal Header - Hidden on Print */}
+        {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-zinc-800 pb-3 no-print">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
               <Download className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white">Export Investor Pitch Deck</h2>
+              <h2 className="text-lg font-bold text-white">Export Investor Materials</h2>
               <p className="text-xs text-zinc-400">
-                Download as direct vector PDF, print to PDF, or export HTML presentation and speaker notes.
+                Download high-fidelity 10-slide deck or 1-page executive deal memo as vector PDF and offline HTML.
               </p>
             </div>
           </div>
@@ -157,81 +145,72 @@ export const ExportModal: React.FC<ExportModalProps> = ({ project, onClose }) =>
           </button>
         </div>
 
-        {/* Tab Controls - Hidden on Print */}
-        <div className="flex items-center gap-2 border-b border-zinc-800 pb-2 no-print overflow-x-auto">
+        {/* Tab Controls */}
+        <div className="flex items-center gap-2 border-b border-zinc-800 pb-2 no-print">
           <button
-            onClick={() => setActiveTab('print')}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-              activeTab === 'print'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                : 'text-zinc-400 hover:text-white'
+            onClick={() => setActiveTab('deck')}
+            className={`rounded-lg px-3.5 py-2 text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'deck'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
             }`}
           >
-            <FileDown className="h-3.5 w-3.5 text-amber-400" /> PDF & Slide Deck
+            <FileDown className="h-4 w-4 text-amber-400" />
+            <span>10-Slide Investor Deck</span>
+            <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">
+              {project.slides.length} Slides
+            </span>
           </button>
+
           <button
             onClick={() => setActiveTab('onepager')}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+            className={`rounded-lg px-3.5 py-2 text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'onepager'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                : 'text-zinc-400 hover:text-white'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
             }`}
           >
-            <FileText className="h-3.5 w-3.5" /> 1-Page Executive Memo
-          </button>
-          <button
-            onClick={() => setActiveTab('markdown')}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-              activeTab === 'markdown'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            📝 Markdown / Text
-          </button>
-          <button
-            onClick={() => setActiveTab('json')}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-              activeTab === 'json'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            ⚙️ JSON Data
+            <FileText className="h-4 w-4 text-emerald-400" />
+            <span>1-Page Executive Memo</span>
+            <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-400 font-bold">
+              Deal Sheet
+            </span>
           </button>
         </div>
 
         {/* Tab Content Area */}
-        <div className="max-h-[70vh] overflow-y-auto pr-1 print:max-h-none print:overflow-visible print:pr-0">
-          {/* TAB 1: PDF EXPORT & PRINT */}
-          {activeTab === 'print' && (
+        <div className="max-h-[70vh] overflow-y-auto pr-1">
+          {/* ======================================================== */}
+          {/* TAB 1: 10-SLIDE INVESTOR DECK                            */}
+          {/* ======================================================== */}
+          {activeTab === 'deck' && (
             <div className="space-y-6">
-              {/* Export Action Controls - Hidden on Print */}
-              <div className="no-print rounded-xl bg-zinc-900/90 border border-zinc-800 p-4 space-y-4">
+              {/* Action Banner */}
+              <div className="rounded-xl bg-zinc-900/90 border border-zinc-800 p-4 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
                       <FileDown className="h-4 w-4 text-amber-400" />
-                      Download 10-Slide Investor Deck (.PDF)
+                      10-Slide Investor Pitch Deck
                     </h3>
                     <p className="text-xs text-zinc-400 mt-0.5">
-                      Direct vector 16:9 PDF file download with cover, all 10 slides, KPIs, and VC review.
+                      Direct vector 16:9 PDF file or standalone interactive offline HTML presentation.
                     </p>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {/* PRIMARY ACTION: DIRECT PDF DOWNLOAD */}
+                    {/* Direct PDF Download */}
                     <button
-                      onClick={handleDirectPdfDownload}
-                      disabled={isGeneratingPdf}
+                      onClick={handleDownloadDeckPdf}
+                      disabled={isGeneratingDeckPdf}
                       className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-extrabold px-5 py-2.5 text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
                     >
-                      {isGeneratingPdf ? (
+                      {isGeneratingDeckPdf ? (
                         <>
                           <Loader2 className="h-4 w-4 animate-spin text-zinc-950" />
                           <span>Generating PDF...</span>
                         </>
-                      ) : pdfSuccess ? (
+                      ) : deckPdfSuccess ? (
                         <>
                           <CheckCircle2 className="h-4 w-4 text-zinc-950" />
                           <span>PDF Downloaded!</span>
@@ -239,29 +218,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({ project, onClose }) =>
                       ) : (
                         <>
                           <Download className="h-4 w-4" />
-                          <span>Download .PDF Deck</span>
+                          <span>Download as PDF</span>
                         </>
                       )}
                     </button>
 
-                    {/* SECONDARY ACTION: PRINT DIALOG */}
+                    {/* Standalone HTML Download */}
                     <button
-                      onClick={handlePrint}
-                      title="Trigger Browser Print Dialog"
-                      className="flex items-center justify-center gap-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 px-3.5 py-2.5 text-xs font-semibold active:scale-95 transition-all cursor-pointer"
-                    >
-                      <Printer className="h-3.5 w-3.5 text-zinc-400" />
-                      <span className="hidden sm:inline">Print Dialog</span>
-                    </button>
-
-                    {/* TERTIARY ACTION: STANDALONE HTML */}
-                    <button
-                      onClick={handleDownloadHtml}
+                      onClick={handleDownloadDeckHtml}
                       title="Download offline HTML presentation package"
-                      className="flex items-center justify-center gap-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 px-3 py-2.5 text-xs font-semibold active:scale-95 transition-all cursor-pointer"
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 px-4 py-2.5 text-xs font-semibold active:scale-95 transition-all cursor-pointer"
                     >
                       <Globe className="h-3.5 w-3.5 text-indigo-400" />
-                      <span className="hidden md:inline">.HTML Deck</span>
+                      <span>Download as HTML</span>
                     </button>
                   </div>
                 </div>
@@ -269,418 +238,545 @@ export const ExportModal: React.FC<ExportModalProps> = ({ project, onClose }) =>
                 {/* PDF Configuration Options */}
                 <div className="pt-3 border-t border-zinc-800 flex flex-wrap items-center gap-4 text-xs">
                   <span className="text-zinc-400 font-medium text-[11px] flex items-center gap-1">
-                    <Settings2 className="h-3 w-3 text-zinc-500" /> PDF Options:
+                    <Settings2 className="h-3.5 w-3.5 text-amber-400" />
+                    Deck Options:
                   </span>
-
-                  <label className="flex items-center gap-1.5 text-zinc-300 hover:text-white cursor-pointer select-none">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-zinc-300 hover:text-white">
                     <input
                       type="checkbox"
                       checked={includeSpeakerNotes}
                       onChange={(e) => setIncludeSpeakerNotes(e.target.checked)}
-                      className="rounded border-zinc-700 bg-zinc-800 text-amber-500 focus:ring-0 cursor-pointer"
+                      className="rounded border-zinc-700 bg-zinc-800 text-amber-500 focus:ring-amber-500/30"
                     />
                     <span>Include Founder Speaker Scripts</span>
                   </label>
-
-                  <label className="flex items-center gap-1.5 text-zinc-300 hover:text-white cursor-pointer select-none">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-zinc-300 hover:text-white">
                     <input
                       type="checkbox"
                       checked={includeScorecard}
                       onChange={(e) => setIncludeScorecard(e.target.checked)}
-                      className="rounded border-zinc-700 bg-zinc-800 text-amber-500 focus:ring-0 cursor-pointer"
+                      className="rounded border-zinc-700 bg-zinc-800 text-amber-500 focus:ring-amber-500/30"
                     />
-                    <span>Include VC Scorecard & Critique</span>
+                    <span>Include VC Scorecard & Review</span>
                   </label>
-
-                  <label className="flex items-center gap-1.5 text-zinc-300 hover:text-white cursor-pointer select-none">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-zinc-300 hover:text-white">
                     <input
                       type="checkbox"
                       checked={includeVisualGuidance}
                       onChange={(e) => setIncludeVisualGuidance(e.target.checked)}
-                      className="rounded border-zinc-700 bg-zinc-800 text-amber-500 focus:ring-0 cursor-pointer"
+                      className="rounded border-zinc-700 bg-zinc-800 text-amber-500 focus:ring-amber-500/30"
                     />
-                    <span>Include Visual Suggestions</span>
+                    <span>Include Layout Guidance</span>
                   </label>
                 </div>
-
-                {exportError && (
-                  <div className="rounded-lg bg-rose-500/10 border border-rose-500/30 p-2.5 text-xs text-rose-300">
-                    ⚠️ {exportError}
-                  </div>
-                )}
               </div>
 
-              {/* PRINTABLE DECK DOCUMENT (Visible in preview and in print) */}
-              <div className="pitch-print-container space-y-6 print:space-y-0">
-                {/* 1. COVER PAGE / EXECUTIVE HEADER */}
-                <div className="print-page-break rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 space-y-6 print:border-2 print:border-zinc-300 print:bg-white print:p-8 print:mb-0 print:min-h-[85vh] print:flex print:flex-col print:justify-between">
-                  <div className="flex items-start justify-between border-b border-zinc-800 pb-4 print:border-b-2 print:border-zinc-200">
+              {exportError && (
+                <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+                  {exportError}
+                </div>
+              )}
+
+              {/* Printable / Viewable Deck Document Preview */}
+              <div className="space-y-8">
+                {/* 1. COVER PAGE PREVIEW */}
+                <div className="rounded-2xl border-2 border-zinc-800 bg-zinc-950 p-8 space-y-8 relative overflow-hidden">
+                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500" />
+                  
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-6">
                     <div>
-                      <div className="inline-flex items-center gap-1.5 rounded-md bg-amber-500/20 border border-amber-500/30 px-2.5 py-1 text-xs font-bold text-amber-400 print:bg-zinc-100 print:border-zinc-300 print:text-zinc-800 mb-2">
-                        10-Slide Investor Deck • Version {project.currentVersion}
+                      <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-400 mb-3">
+                        <Sparkles className="h-3.5 w-3.5" />
+                        <span>Institutional Investor Presentation</span>
                       </div>
-                      <h1 className="text-3xl font-extrabold text-white print:text-zinc-950">
+                      <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white">
                         {project.intake.startupName}
                       </h1>
-                      <p className="text-sm font-medium text-amber-300/90 print:text-zinc-700 mt-1 max-w-2xl">
-                        {project.intake.tagline || project.intake.rawIdea.slice(0, 140)}
+                      <p className="text-base text-zinc-300 font-medium mt-1.5 max-w-2xl leading-relaxed">
+                        {project.intake.tagline || project.intake.rawIdea}
                       </p>
                     </div>
 
-                    {project.score && (
-                      <div className="text-right">
-                        <div className="inline-flex flex-col items-end rounded-xl bg-zinc-950 p-3 border border-zinc-800 print:bg-zinc-50 print:border-zinc-300">
-                          <span className="text-[10px] uppercase font-bold text-zinc-400 print:text-zinc-600">
-                            VC Quality Score
-                          </span>
-                          <span className="text-2xl font-black text-emerald-400 print:text-zinc-900">
-                            {project.score.overallScore}
-                            <span className="text-xs text-zinc-500 font-normal">/100</span>
-                          </span>
-                          <span className="text-[10px] font-bold text-amber-400 print:text-zinc-800">
-                            {project.score.tier}
-                          </span>
-                        </div>
+                    <div className="text-right space-y-1">
+                      <div className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                        Date & Version
                       </div>
-                    )}
-                  </div>
-
-                  {/* Metadata Matrix */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs print:grid-cols-4">
-                    <div className="rounded-xl bg-zinc-950/80 p-3 border border-zinc-800/80 print:bg-zinc-50 print:border-zinc-200 space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-zinc-500 print:text-zinc-500">Stage</span>
-                      <p className="font-bold text-white print:text-zinc-900">{project.intake.stage}</p>
-                    </div>
-                    <div className="rounded-xl bg-zinc-950/80 p-3 border border-zinc-800/80 print:bg-zinc-50 print:border-zinc-200 space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-zinc-500 print:text-zinc-500">Market / Region</span>
-                      <p className="font-bold text-white print:text-zinc-900">{project.intake.geography || 'Global'}</p>
-                    </div>
-                    <div className="rounded-xl bg-zinc-950/80 p-3 border border-zinc-800/80 print:bg-zinc-50 print:border-zinc-200 space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-zinc-500 print:text-zinc-500">Business Model</span>
-                      <p className="font-bold text-white print:text-zinc-900">{project.intake.businessModel}</p>
-                    </div>
-                    <div className="rounded-xl bg-zinc-950/80 p-3 border border-zinc-800/80 print:bg-zinc-50 print:border-zinc-200 space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-zinc-500 print:text-zinc-500">Export Date</span>
-                      <p className="font-bold text-white print:text-zinc-900">{formattedDate}</p>
+                      <div className="text-sm font-semibold text-white">
+                        {formattedDate} • v{project.currentVersion}
+                      </div>
+                      {project.score && (
+                        <div className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-bold text-amber-400 mt-1">
+                          <Award className="h-3.5 w-3.5" />
+                          <span>VC Readiness: {project.score.overallScore}/100</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Executive Narrative Snapshot */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-2 print:grid-cols-2">
-                    <div className="rounded-xl bg-zinc-950/60 p-4 border border-zinc-800/80 print:bg-zinc-50 print:border-zinc-200 space-y-1.5">
-                      <span className="text-[10px] font-extrabold uppercase text-amber-400 print:text-zinc-800 tracking-wider">
-                        Core Problem
+                  {/* Metadata Chips Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="rounded-xl bg-zinc-900/80 p-3.5 border border-zinc-800">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
+                        Funding Stage
                       </span>
-                      <p className="text-zinc-200 print:text-zinc-800 leading-relaxed">
-                        {project.analysis?.coreProblem || project.intake.problem}
-                      </p>
-                    </div>
-                    <div className="rounded-xl bg-zinc-950/60 p-4 border border-zinc-800/80 print:bg-zinc-50 print:border-zinc-200 space-y-1.5">
-                      <span className="text-[10px] font-extrabold uppercase text-emerald-400 print:text-zinc-800 tracking-wider">
-                        Value Proposition
+                      <span className="text-sm font-bold text-white mt-0.5 block">
+                        {project.intake.stage}
                       </span>
-                      <p className="text-zinc-200 print:text-zinc-800 leading-relaxed">
-                        {project.analysis?.valueProposition || project.intake.solution}
-                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-zinc-900/80 p-3.5 border border-zinc-800">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
+                        Business Model
+                      </span>
+                      <span className="text-sm font-bold text-white mt-0.5 block truncate">
+                        {project.intake.businessModel}
+                      </span>
+                    </div>
+
+                    <div className="rounded-xl bg-zinc-900/80 p-3.5 border border-zinc-800">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
+                        Target Market
+                      </span>
+                      <span className="text-sm font-bold text-white mt-0.5 block truncate">
+                        {project.intake.geography || 'Global'}
+                      </span>
+                    </div>
+
+                    <div className="rounded-xl bg-zinc-900/80 p-3.5 border border-zinc-800">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
+                        Deck Structure
+                      </span>
+                      <span className="text-sm font-bold text-white mt-0.5 block">
+                        10-Slide Standard Flow
+                      </span>
                     </div>
                   </div>
 
-                  {/* Footer */}
-                  <div className="flex items-center justify-between text-[11px] text-zinc-500 border-t border-zinc-800/80 pt-3 print:border-t print:border-zinc-200">
-                    <span>PitchForge AI • Pitch Strategy Studio</span>
-                    <span>Confidential • Investor Briefing</span>
-                  </div>
+                  {/* High Level Thesis Summary */}
+                  {project.analysis && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-2">
+                      <div className="rounded-xl bg-zinc-900/40 p-4 border border-zinc-800/80 space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase text-rose-400 tracking-wider">
+                          Core Problem Solved
+                        </span>
+                        <p className="text-zinc-300 leading-relaxed font-medium">
+                          {project.analysis.coreProblem}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl bg-zinc-900/40 p-4 border border-zinc-800/80 space-y-1.5">
+                        <span className="text-[10px] font-extrabold uppercase text-emerald-400 tracking-wider">
+                          Value Proposition & Moat
+                        </span>
+                        <p className="text-zinc-300 leading-relaxed font-medium">
+                          {project.analysis.valueProposition}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* 2. THE 10 SLIDES */}
-                {project.slides.map((s) => (
-                  <div
-                    key={s.slideNumber}
-                    className="print-page-break rounded-2xl border border-zinc-800 bg-zinc-950 p-6 sm:p-8 space-y-5 print:border-2 print:border-zinc-300 print:bg-white print:p-8 print:min-h-[85vh] print:flex print:flex-col print:justify-between"
-                  >
-                    {/* Slide Top Header */}
-                    <div className="space-y-2 border-b border-zinc-800/80 pb-3 print:border-zinc-200">
-                      <div className="flex items-center justify-between">
-                        <span className="rounded-full bg-amber-500/20 border border-amber-500/30 px-3 py-0.5 text-xs font-bold text-amber-400 print:bg-zinc-100 print:border-zinc-300 print:text-zinc-800">
-                          Slide {s.slideNumber} of 10 • {s.category.toUpperCase().replace('_', ' ')}
-                        </span>
-                        <span className="text-xs font-bold text-zinc-400 print:text-zinc-600">
-                          {project.intake.startupName}
-                        </span>
-                      </div>
-
-                      <h2 className="text-xl sm:text-2xl font-black text-white print:text-zinc-950">
-                        {s.title}
-                      </h2>
-                      <p className="text-sm font-semibold text-amber-300/90 print:text-zinc-800 leading-snug">
-                        "{s.headline}"
-                      </p>
-                    </div>
-
-                    {/* Slide Core Content Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-auto pt-2 print:grid-cols-2">
-                      {/* Left: Bullet Points */}
-                      <div className="space-y-3">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 print:text-zinc-600">
-                          Key Argument & Narrative Points
-                        </span>
-                        <div className="space-y-2.5">
-                          {s.bullets.map((b, idx) => (
-                            <div key={idx} className="flex items-start gap-2.5 text-xs">
-                              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-400 print:bg-zinc-200 print:text-zinc-900 text-[10px] font-bold mt-0.5">
-                                ✓
-                              </span>
-                              <p className="text-zinc-200 print:text-zinc-800 leading-relaxed">{b}</p>
-                            </div>
-                          ))}
+                <div className="space-y-6">
+                  {project.slides.map((slide, index) => (
+                    <div
+                      key={slide.id || index}
+                      className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6 space-y-5 shadow-md relative overflow-hidden"
+                    >
+                      {/* Slide Header Strip */}
+                      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-500 text-zinc-950 text-xs font-black">
+                            {slide.slideNumber}
+                          </span>
+                          <span className="text-xs font-bold uppercase tracking-wider text-amber-400">
+                            {slide.category.replace('_', ' ')}
+                          </span>
                         </div>
+                        <span className="text-xs font-medium text-zinc-400">
+                          Slide {slide.slideNumber} of {project.slides.length}
+                        </span>
                       </div>
 
-                      {/* Right: Key Data Points & Metrics */}
-                      <div className="space-y-3">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 print:text-zinc-600">
-                          Key Evidence & Quantitative Metrics
-                        </span>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                          {s.keyDataPoints.map((dp, idx) => (
-                            <div
-                              key={idx}
-                              className="rounded-xl bg-zinc-900/90 p-3 border border-zinc-800 print:bg-zinc-50 print:border-zinc-200 space-y-1"
-                            >
-                              <span className="text-[10px] font-semibold text-zinc-400 print:text-zinc-500 block truncate">
-                                {dp.label}
-                              </span>
-                              <span className="text-sm font-extrabold text-white print:text-zinc-950 block">
-                                {dp.value}
-                              </span>
-                              <span
-                                className={`inline-block text-[8px] font-bold uppercase rounded px-1.5 py-0.5 border ${
-                                  dp.status === 'validated'
-                                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 print:bg-emerald-50 print:text-emerald-800 print:border-emerald-300'
-                                    : dp.status === 'assumption'
-                                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 print:bg-amber-50 print:text-amber-800 print:border-amber-300'
-                                    : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40 print:bg-indigo-50 print:text-indigo-800 print:border-indigo-300'
-                                }`}
-                              >
-                                {dp.status}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Visual Recommendation */}
-                        {includeVisualGuidance && (
-                          <div className="rounded-xl bg-zinc-900/50 p-2.5 border border-zinc-800/80 print:bg-zinc-50 print:border-zinc-200 text-[11px]">
-                            <span className="text-[9px] font-bold uppercase text-indigo-400 print:text-zinc-600 block">
-                              Visual Layout Guidance:
-                            </span>
-                            <p className="text-zinc-300 print:text-zinc-700 mt-0.5">
-                              {s.visualRecommendation.description}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Speaker Script Section */}
-                    {includeSpeakerNotes && (
-                      <div className="rounded-xl bg-zinc-900/60 p-3.5 border border-zinc-800 text-xs space-y-1 print:bg-zinc-50 print:border-zinc-200">
-                        <span className="text-[10px] font-bold uppercase text-amber-400 print:text-zinc-800 block">
-                          Founder Speaker Script (60-90s per slide):
-                        </span>
-                        <p className="text-zinc-300 print:text-zinc-800 italic leading-relaxed text-[11px]">
-                          "{s.speakerNotes}"
+                      {/* Slide Title & 1-Second Takeaway */}
+                      <div className="space-y-1">
+                        <h3 className="text-xl font-black text-white tracking-tight">
+                          {slide.title}
+                        </h3>
+                        <p className="text-xs font-semibold text-amber-400 italic">
+                          "{slide.headline}"
                         </p>
                       </div>
-                    )}
 
-                    {/* Slide Footer */}
-                    <div className="flex items-center justify-between text-[10px] text-zinc-500 border-t border-zinc-800/80 pt-3 print:border-t print:border-zinc-200">
-                      <span>PitchForge AI • {project.intake.startupName}</span>
-                      <span>Slide {s.slideNumber} of {project.slides.length}</span>
-                    </div>
-                  </div>
-                ))}
+                      {/* 2-Column Content Grid */}
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+                        {/* Left Column: Narrative Arguments */}
+                        <div className="md:col-span-7 space-y-2.5 rounded-xl bg-zinc-900/60 p-4 border border-zinc-800/80">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 block">
+                            Key Arguments & Evidence
+                          </span>
+                          <ul className="space-y-2 text-xs">
+                            {slide.bullets.map((bullet, bIdx) => (
+                              <li key={bIdx} className="flex items-start gap-2 text-zinc-200">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                                <span className="leading-relaxed">{bullet}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
 
-                {/* 3. VC SCORECARD & INVESTOR CRITIQUE PAGE */}
-                {includeScorecard && (project.score || project.critique) && (
-                  <div className="print-page-break rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 sm:p-8 space-y-6 print:border-2 print:border-zinc-300 print:bg-white print:p-8 print:min-h-[85vh] print:flex print:flex-col print:justify-between">
-                    <div className="border-b border-zinc-800 pb-3 print:border-zinc-200">
-                      <div className="inline-flex items-center gap-1.5 rounded-md bg-indigo-500/20 border border-indigo-500/30 px-2.5 py-1 text-xs font-bold text-indigo-400 print:bg-zinc-100 print:border-zinc-300 print:text-zinc-800 mb-2">
-                        Investment Committee Assessment
-                      </div>
-                      <h2 className="text-2xl font-black text-white print:text-zinc-950">
-                        VC Quality Scorecard & 60-Second Investor Critique
-                      </h2>
-                    </div>
-
-                    {/* Scorecard Breakdown */}
-                    {project.score && (
-                      <div className="space-y-3">
-                        <span className="text-xs font-bold uppercase tracking-wider text-zinc-400 print:text-zinc-600">
-                          Rubric Dimension Ratings
-                        </span>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs print:grid-cols-4">
-                          {Object.entries(project.score.categories).map(([catKey, catVal]: [string, any]) => (
-                            <div
-                              key={catKey}
-                              className="rounded-xl bg-zinc-950 p-3 border border-zinc-800 print:bg-zinc-50 print:border-zinc-200 space-y-1"
-                            >
-                              <span className="text-[10px] font-semibold text-zinc-400 print:text-zinc-500 block capitalize">
-                                {catKey.replace(/([A-Z])/g, ' $1')}
+                        {/* Right Column: Metrics & Layout Guidance */}
+                        <div className="md:col-span-5 space-y-3">
+                          {slide.keyDataPoints.length > 0 && (
+                            <div className="space-y-2 rounded-xl bg-zinc-900/60 p-3.5 border border-zinc-800/80">
+                              <span className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400 block">
+                                Metrics & Validation
                               </span>
-                              <div className="flex items-center justify-between">
-                                <span className="font-extrabold text-white print:text-zinc-950 text-sm">
-                                  {catVal.score}/10
-                                </span>
-                                <span
-                                  className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                                    catVal.score >= 8
-                                      ? 'text-emerald-400 bg-emerald-500/10'
-                                      : catVal.score >= 6
-                                      ? 'text-amber-400 bg-amber-500/10'
-                                      : 'text-rose-400 bg-rose-500/10'
-                                  }`}
-                                >
-                                  {catVal.rating}
-                                </span>
+                              <div className="grid grid-cols-2 gap-2">
+                                {slide.keyDataPoints.map((dp, dpIdx) => (
+                                  <div
+                                    key={dpIdx}
+                                    className="rounded-lg bg-zinc-950 p-2 border border-zinc-800"
+                                  >
+                                    <span className="text-[9px] text-zinc-400 block truncate">
+                                      {dp.label}
+                                    </span>
+                                    <span className="text-xs font-bold text-white block truncate">
+                                      {dp.value}
+                                    </span>
+                                    <span
+                                      className={`text-[8px] font-extrabold uppercase mt-0.5 inline-block ${
+                                        dp.status === 'validated'
+                                          ? 'text-emerald-400'
+                                          : dp.status === 'assumption'
+                                          ? 'text-amber-400'
+                                          : 'text-indigo-400'
+                                      }`}
+                                    >
+                                      {dp.status}
+                                    </span>
+                                  </div>
+                                ))}
                               </div>
                             </div>
-                          ))}
+                          )}
+
+                          {includeVisualGuidance && (
+                            <div className="rounded-xl bg-indigo-950/20 p-3 border border-indigo-500/20 space-y-1">
+                              <span className="text-[9px] font-extrabold uppercase tracking-wider text-indigo-400 block">
+                                Visual Guidance
+                              </span>
+                              <p className="text-[11px] text-zinc-300 leading-relaxed">
+                                {slide.visualRecommendation.description}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
-                    )}
 
-                    {/* AI Investor Critique Highlights */}
-                    {project.critique && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs print:grid-cols-2">
-                        <div className="rounded-xl bg-zinc-950 p-4 border border-zinc-800 print:bg-zinc-50 print:border-zinc-200 space-y-2">
-                          <span className="text-[10px] font-extrabold uppercase text-amber-400 print:text-zinc-800 tracking-wider">
-                            60-Second Investor Verdict
+                      {/* Founder Speaker Script */}
+                      {includeSpeakerNotes && (
+                        <div className="rounded-xl bg-zinc-900/40 p-3.5 border border-zinc-800/80 space-y-1">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-400 block">
+                            Founder Speaker Script (60-90s)
                           </span>
-                          <p className="text-zinc-200 print:text-zinc-800 leading-relaxed font-semibold">
-                            "{project.critique.sixtySecondVerdict}"
+                          <p className="text-xs text-zinc-300 italic leading-relaxed">
+                            "{slide.speakerNotes}"
                           </p>
-                          <div className="pt-2 border-t border-zinc-900 print:border-zinc-200 text-[11px] text-zinc-400 print:text-zinc-600">
-                            <strong>Strongest Asset:</strong> {project.critique.strongestPart}
-                          </div>
                         </div>
-
-                        <div className="rounded-xl bg-zinc-950 p-4 border border-zinc-800 print:bg-zinc-50 print:border-zinc-200 space-y-2">
-                          <span className="text-[10px] font-extrabold uppercase text-rose-400 print:text-zinc-800 tracking-wider">
-                            Biggest Unanswered Question & Risk
-                          </span>
-                          <p className="text-zinc-200 print:text-zinc-800 leading-relaxed">
-                            {project.critique.biggestUnansweredQuestion}
-                          </p>
-                          <div className="pt-2 border-t border-zinc-900 print:border-zinc-200 text-[11px] text-zinc-400 print:text-zinc-600">
-                            <strong>Existential Risk:</strong> {project.critique.biggestInvestmentRisk}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Footer */}
-                    <div className="flex items-center justify-between text-[10px] text-zinc-500 border-t border-zinc-800/80 pt-3 print:border-t print:border-zinc-200">
-                      <span>PitchForge AI • Pitch Readiness Scorecard</span>
-                      <span>Evaluated with Gemini 3.7 Flash</span>
+                      )}
                     </div>
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
             </div>
           )}
 
-          {/* TAB 2: 1-PAGE EXECUTIVE MEMO */}
+          {/* ======================================================== */}
+          {/* TAB 2: 1-PAGE EXECUTIVE MEMO (DEAL SHEET)                */}
+          {/* ======================================================== */}
           {activeTab === 'onepager' && (
-            <div className="space-y-4">
-              <div className="flex justify-end no-print gap-2">
-                <button
-                  onClick={handleDirectPdfDownload}
-                  className="flex items-center gap-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold px-4 py-2 text-xs transition-colors cursor-pointer"
-                >
-                  <Download className="h-3.5 w-3.5" /> Download Full Deck (.PDF)
-                </button>
-                <button
-                  onClick={handlePrint}
-                  className="flex items-center gap-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 px-4 py-2 text-xs font-semibold transition-colors cursor-pointer"
-                >
-                  <Printer className="h-3.5 w-3.5" /> Print Memo
-                </button>
-              </div>
-
-              <div className="rounded-2xl bg-zinc-900/50 border border-zinc-800 p-6 space-y-5 text-xs print:bg-white print:border-2 print:border-zinc-300">
-                <div className="flex items-center justify-between border-b border-zinc-800 pb-3 print:border-zinc-200">
+            <div className="space-y-6">
+              {/* Action Banner */}
+              <div className="rounded-xl bg-zinc-900/90 border border-zinc-800 p-4 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-xl font-bold text-white print:text-zinc-950">{project.intake.startupName}</h3>
-                    <p className="text-xs text-zinc-300 print:text-zinc-600">{project.intake.tagline}</p>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-emerald-400" />
+                      1-Page Executive Deal Memo
+                    </h3>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      Single-page executive deal sheet for partners, angel syndicates, and investor intros.
+                    </p>
                   </div>
-                  <span className="rounded-full bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-400 border border-amber-500/40 print:bg-zinc-100 print:text-zinc-900 print:border-zinc-300">
-                    {project.intake.stage} • {project.score?.overallScore || 'Evaluated'}/100
-                  </span>
+
+                  <div className="flex items-center gap-2">
+                    {/* Memo PDF Download */}
+                    <button
+                      onClick={handleDownloadMemoPdf}
+                      disabled={isGeneratingMemoPdf}
+                      className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-zinc-950 font-extrabold px-5 py-2.5 text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isGeneratingMemoPdf ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin text-zinc-950" />
+                          <span>Generating PDF...</span>
+                        </>
+                      ) : memoPdfSuccess ? (
+                        <>
+                          <CheckCircle2 className="h-4 w-4 text-zinc-950" />
+                          <span>Memo Downloaded!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-4 w-4" />
+                          <span>Download 1-Page Memo (.PDF)</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Memo HTML Download */}
+                    <button
+                      onClick={handleDownloadMemoHtml}
+                      title="Download offline HTML 1-Page Memo"
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 px-4 py-2.5 text-xs font-semibold active:scale-95 transition-all cursor-pointer"
+                    >
+                      <Globe className="h-3.5 w-3.5 text-indigo-400" />
+                      <span>Download as HTML</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {exportError && (
+                <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+                  {exportError}
+                </div>
+              )}
+
+              {/* 1-Page Memo Visual Preview */}
+              <div className="rounded-2xl border-2 border-zinc-800 bg-zinc-950 p-6 space-y-6 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-amber-500" />
+
+                {/* Memo Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+                  <div>
+                    <span className="rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                      Executive Deal Memo
+                    </span>
+                    <h2 className="text-2xl font-black text-white mt-1.5">
+                      {project.intake.startupName}
+                    </h2>
+                    <p className="text-xs text-zinc-300 italic mt-0.5">
+                      {project.intake.tagline || project.intake.rawIdea}
+                    </p>
+                  </div>
+
+                  <div className="text-right space-y-1">
+                    <span className="text-xs font-medium text-zinc-400 block">
+                      {project.intake.stage} • {project.intake.geography || 'Global'}
+                    </span>
+                    {project.score && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-xs font-bold text-amber-400">
+                        <Award className="h-3 w-3" />
+                        Score: {project.score.overallScore}/100 ({project.score.tier})
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="p-3 rounded-xl bg-zinc-950 print:bg-zinc-50 border border-zinc-800 print:border-zinc-200">
-                    <strong className="text-amber-400 print:text-zinc-800 block mb-1">Problem & Pain:</strong>
-                    <p className="text-zinc-300 print:text-zinc-700">{project.analysis?.coreProblem || project.intake.problem}</p>
+                {/* Key Metadata Quick Bar */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="rounded-xl bg-zinc-900/80 p-3 border border-zinc-800">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
+                      Business Model
+                    </span>
+                    <span className="text-xs font-bold text-white block mt-0.5">
+                      {project.intake.businessModel}
+                    </span>
                   </div>
-                  <div className="p-3 rounded-xl bg-zinc-950 print:bg-zinc-50 border border-zinc-800 print:border-zinc-200">
-                    <strong className="text-emerald-400 print:text-zinc-800 block mb-1">Solution & Moat:</strong>
-                    <p className="text-zinc-300 print:text-zinc-700">{project.analysis?.valueProposition || project.intake.solution}</p>
+
+                  <div className="rounded-xl bg-zinc-900/80 p-3 border border-zinc-800">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
+                      Target Market
+                    </span>
+                    <span className="text-xs font-bold text-white block mt-0.5 truncate">
+                      {project.analysis?.marketOpportunity?.tamEstimate
+                        ? `TAM: ${project.analysis.marketOpportunity.tamEstimate}`
+                        : project.intake.targetCustomer}
+                    </span>
                   </div>
-                  <div className="p-3 rounded-xl bg-zinc-950 print:bg-zinc-50 border border-zinc-800 print:border-zinc-200">
-                    <strong className="text-indigo-400 print:text-zinc-800 block mb-1">Business Model:</strong>
-                    <p className="text-zinc-300 print:text-zinc-700">{project.analysis?.businessModel || project.intake.businessModel}</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-zinc-950 print:bg-zinc-50 border border-zinc-800 print:border-zinc-200">
-                    <strong className="text-cyan-400 print:text-zinc-800 block mb-1">Target Market:</strong>
-                    <p className="text-zinc-300 print:text-zinc-700">{project.analysis?.targetCustomer || project.intake.targetCustomer}</p>
+
+                  <div className="rounded-xl bg-zinc-900/80 p-3 border border-zinc-800">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
+                      Evaluation Date
+                    </span>
+                    <span className="text-xs font-bold text-white block mt-0.5">
+                      {formattedDate}
+                    </span>
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
 
-          {/* TAB 3: MARKDOWN */}
-          {activeTab === 'markdown' && (
-            <div className="space-y-3">
-              <div className="flex justify-end no-print">
-                <button
-                  onClick={() => handleCopy(generateMarkdown())}
-                  className="flex items-center gap-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 text-xs text-white border border-zinc-700 transition-colors cursor-pointer"
-                >
-                  {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                  <span>{copied ? 'Copied!' : 'Copy Markdown'}</span>
-                </button>
-              </div>
-              <textarea
-                readOnly
-                rows={12}
-                value={generateMarkdown()}
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-xs text-zinc-300 font-mono focus:outline-none"
-              />
-            </div>
-          )}
+                {/* Core 2x3 Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  {/* Problem */}
+                  <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-2">
+                    <strong className="text-rose-400 font-bold uppercase tracking-wider block text-[11px]">
+                      1. Problem & Customer Pain Points
+                    </strong>
+                    <p className="text-zinc-300 leading-relaxed">
+                      {project.analysis?.coreProblem || project.intake.problem}
+                    </p>
+                    {probSlide && probSlide.bullets.length > 0 && (
+                      <ul className="space-y-1 text-zinc-400 pt-1 border-t border-zinc-800/80">
+                        {probSlide.bullets.slice(0, 2).map((b, i) => (
+                          <li key={i} className="flex items-start gap-1.5">
+                            <span className="text-rose-400">•</span>
+                            <span>{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
 
-          {/* TAB 4: JSON */}
-          {activeTab === 'json' && (
-            <div className="space-y-3">
-              <div className="flex justify-end no-print">
-                <button
-                  onClick={() => handleCopy(JSON.stringify(project, null, 2))}
-                  className="flex items-center gap-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 text-xs text-white border border-zinc-700 transition-colors cursor-pointer"
-                >
-                  {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                  <span>{copied ? 'Copied!' : 'Copy JSON'}</span>
-                </button>
+                  {/* Solution */}
+                  <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-2">
+                    <strong className="text-emerald-400 font-bold uppercase tracking-wider block text-[11px]">
+                      2. Solution & Value Proposition
+                    </strong>
+                    <p className="text-zinc-300 leading-relaxed">
+                      {project.analysis?.valueProposition || project.intake.solution}
+                    </p>
+                    {solSlide && solSlide.bullets.length > 0 && (
+                      <ul className="space-y-1 text-zinc-400 pt-1 border-t border-zinc-800/80">
+                        {solSlide.bullets.slice(0, 2).map((b, i) => (
+                          <li key={i} className="flex items-start gap-1.5">
+                            <span className="text-emerald-400">•</span>
+                            <span>{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* Market Size */}
+                  <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-2">
+                    <strong className="text-indigo-400 font-bold uppercase tracking-wider block text-[11px]">
+                      3. Market Opportunity & Sizing
+                    </strong>
+                    <p className="text-zinc-300 leading-relaxed">
+                      {project.analysis?.marketOpportunity?.tamEstimate
+                        ? `TAM: ${project.analysis.marketOpportunity.tamEstimate} | SAM: ${project.analysis.marketOpportunity.samEstimate || 'N/A'} | SOM: ${project.analysis.marketOpportunity.somEstimate || 'N/A'}`
+                        : project.intake.targetCustomer}
+                    </p>
+                    {marketSlide && marketSlide.bullets.length > 0 && (
+                      <ul className="space-y-1 text-zinc-400 pt-1 border-t border-zinc-800/80">
+                        {marketSlide.bullets.slice(0, 2).map((b, i) => (
+                          <li key={i} className="flex items-start gap-1.5">
+                            <span className="text-indigo-400">•</span>
+                            <span>{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* Business Model */}
+                  <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-2">
+                    <strong className="text-sky-400 font-bold uppercase tracking-wider block text-[11px]">
+                      4. Business Model & Monetization
+                    </strong>
+                    <p className="text-zinc-300 leading-relaxed">
+                      {project.analysis?.businessModel || project.intake.businessModel}
+                    </p>
+                    {bizSlide && bizSlide.bullets.length > 0 && (
+                      <ul className="space-y-1 text-zinc-400 pt-1 border-t border-zinc-800/80">
+                        {bizSlide.bullets.slice(0, 2).map((b, i) => (
+                          <li key={i} className="flex items-start gap-1.5">
+                            <span className="text-sky-400">•</span>
+                            <span>{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* Traction */}
+                  <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-2">
+                    <strong className="text-purple-400 font-bold uppercase tracking-wider block text-[11px]">
+                      5. Traction & Key Milestones
+                    </strong>
+                    <p className="text-zinc-300 leading-relaxed">
+                      {project.intake.existingTraction || 'Early adoption and engagement milestones.'}
+                    </p>
+                    {tracSlide && tracSlide.bullets.length > 0 && (
+                      <ul className="space-y-1 text-zinc-400 pt-1 border-t border-zinc-800/80">
+                        {tracSlide.bullets.slice(0, 2).map((b, i) => (
+                          <li key={i} className="flex items-start gap-1.5">
+                            <span className="text-purple-400">•</span>
+                            <span>{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* Competitive Advantage */}
+                  <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-2">
+                    <strong className="text-pink-400 font-bold uppercase tracking-wider block text-[11px]">
+                      6. Competitive Advantage & Moat
+                    </strong>
+                    <p className="text-zinc-300 leading-relaxed">
+                      {project.analysis?.differentiation || project.intake.competitiveAdvantage || 'Defensible product architecture.'}
+                    </p>
+                    {compSlide && compSlide.bullets.length > 0 && (
+                      <ul className="space-y-1 text-zinc-400 pt-1 border-t border-zinc-800/80">
+                        {compSlide.bullets.slice(0, 2).map((b, i) => (
+                          <li key={i} className="flex items-start gap-1.5">
+                            <span className="text-pink-400">•</span>
+                            <span>{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+
+                {/* Bottom Panel: Team & VC Review */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-2 border-t border-zinc-800">
+                  <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 space-y-1.5">
+                    <strong className="text-yellow-400 font-bold uppercase tracking-wider block text-[11px]">
+                      7. Team & Capital Requirements
+                    </strong>
+                    <p className="text-zinc-300">
+                      {project.intake.teamInfo || 'Founding team with deep domain experience.'}
+                    </p>
+                    <p className="text-zinc-400 font-medium">
+                      {askSlide ? askSlide.headline : '18-month roadmap to achieve scale milestones.'}
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 space-y-1.5">
+                    <strong className="text-amber-400 font-bold uppercase tracking-wider block text-[11px]">
+                      8. VC Investment Verdict
+                    </strong>
+                    <p className="text-zinc-200 font-semibold italic">
+                      "{project.critique?.sixtySecondVerdict || 'Strong institutional narrative readiness.'}"
+                    </p>
+                    {project.critique && (
+                      <p className="text-zinc-400 text-[10px]">
+                        <strong>Strongest Asset:</strong> {project.critique.strongestPart}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Memo Footer */}
+                <div className="flex items-center justify-between text-[10px] text-zinc-500 border-t border-zinc-800/80 pt-3">
+                  <span>PitchForge AI • Executive Deal Memo</span>
+                  <span>Strictly Confidential</span>
+                </div>
               </div>
-              <textarea
-                readOnly
-                rows={12}
-                value={JSON.stringify(project, null, 2)}
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-xs text-amber-300/80 font-mono focus:outline-none"
-              />
             </div>
           )}
         </div>
