@@ -27,6 +27,7 @@ import {
   subscribeUserProjects,
   saveProjectToFirestore,
   deleteProjectFromFirestore,
+  syncLocalProjectsToFirestore,
 } from './services/firestoreService';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
@@ -44,7 +45,7 @@ import { ExportModal } from './components/ExportModal';
 import { SettingsModal } from './components/SettingsModal';
 
 function AppContent() {
-  const { user } = useAuth();
+  const { user, setSyncStatus } = useAuth();
   const [projects, setProjects] = useState<PitchProject[]>([]);
   const [activeProject, setActiveProject] = useState<PitchProject | null>(null);
 
@@ -62,19 +63,35 @@ function AppContent() {
   const [showExport, setShowExport] = useState(false);
   const [showPresentation, setShowPresentation] = useState(false);
 
-  // Synchronize projects with Firestore or LocalStorage
+  // Synchronize projects with Firestore and LocalStorage
   useEffect(() => {
     if (user) {
-      const unsubscribe = subscribeUserProjects(user.uid, (firestoreProjects) => {
-        setProjects(firestoreProjects);
-        if (firestoreProjects.length > 0) {
-          setActiveProject((prev) => {
-            if (!prev) return firestoreProjects[0];
-            const updated = firestoreProjects.find((p) => p.id === prev.id);
-            return updated || firestoreProjects[0];
-          });
+      // Auto-migrate local drafts to Firestore
+      const local = getStoredProjects();
+      if (local.length > 0) {
+        syncLocalProjectsToFirestore(local, user.uid, user.email).catch((e) =>
+          console.warn('Initial sync notice:', e)
+        );
+      }
+
+      setSyncStatus('syncing');
+      const unsubscribe = subscribeUserProjects(
+        user.uid,
+        (firestoreProjects) => {
+          setSyncStatus('synced');
+          setProjects(firestoreProjects);
+          if (firestoreProjects.length > 0) {
+            setActiveProject((prev) => {
+              if (!prev) return firestoreProjects[0];
+              const updated = firestoreProjects.find((p) => p.id === prev.id);
+              return updated || firestoreProjects[0];
+            });
+          }
+        },
+        () => {
+          setSyncStatus('offline');
         }
-      });
+      );
       return () => unsubscribe();
     } else {
       const local = getStoredProjects();
@@ -90,9 +107,12 @@ function AppContent() {
     saveLocalProject(project);
     if (user) {
       try {
+        setSyncStatus('syncing');
         await saveProjectToFirestore(project, user.uid, user.email);
+        setSyncStatus('synced');
       } catch (err: any) {
         console.error('Failed to sync project to Firestore:', err);
+        setSyncStatus('error');
       }
     }
   };
