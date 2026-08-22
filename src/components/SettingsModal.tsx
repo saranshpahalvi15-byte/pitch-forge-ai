@@ -3,7 +3,6 @@ import {
   Settings,
   X,
   CheckCircle2,
-  Database,
   Sparkles,
   Server,
   RefreshCw,
@@ -16,10 +15,9 @@ import firebaseConfig from '../../firebase-applet-config.json';
 
 interface SettingsModalProps {
   onClose: () => void;
-  onResetData: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onResetData }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   const { user } = useAuth();
   const [healthStatus, setHealthStatus] = useState<any>(null);
   const [isChecking, setIsChecking] = useState(false);
@@ -137,29 +135,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onResetDa
                 </p>
               )}
             </div>
-          </div>
-        </div>
-
-        {/* Local Storage & Reset */}
-        <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 space-y-2">
-          <span className="text-xs font-bold text-rose-400 uppercase tracking-wider">
-            Workspace Data Reset
-          </span>
-          <p className="text-xs text-zinc-300">
-            Clear all saved local pitch drafts and re-initialize the workspace.
-          </p>
-          <div className="pt-1">
-            <button
-              onClick={() => {
-                if (confirm('Are you sure you want to reset all pitch data and restore default state?')) {
-                  onResetData();
-                  onClose();
-                }
-              }}
-              className="rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer"
-            >
-              Reset All Pitch Data
-            </button>
           </div>
         </div>
       </div>

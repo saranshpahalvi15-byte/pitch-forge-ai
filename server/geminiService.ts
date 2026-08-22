@@ -7,16 +7,17 @@ import {
   InvestorCritique,
 } from '../src/types/pitch';
 
-const apiKey = process.env.GEMINI_API_KEY || '';
-
-export const ai = new GoogleGenAI({
-  apiKey: apiKey,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
+export function getGenAIClient(): GoogleGenAI {
+  const apiKey = process.env.GEMINI_API_KEY || '';
+  return new GoogleGenAI({
+    apiKey: apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
     },
-  },
-});
+  });
+}
 
 // Valid models in accordance with gemini-api skill guide
 const CANDIDATE_MODELS = ['gemini-3.7-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
@@ -40,6 +41,7 @@ async function callGeminiWithRetry(options: {
     : CANDIDATE_MODELS;
 
   let lastError: any = null;
+  const ai = getGenAIClient();
 
   for (const model of modelsToTry) {
     // Up to 2 quick attempts per model

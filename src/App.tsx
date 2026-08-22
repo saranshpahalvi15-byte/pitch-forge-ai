@@ -423,16 +423,6 @@ function AppContent() {
     setCurrentView('studio');
   };
 
-  // 8. Reset all data
-  const handleResetData = () => {
-    if (user && !isAnonymous) {
-      deleteLocalProject('', user.uid);
-    }
-    setProjects([]);
-    setActiveProject(null);
-    setCurrentView('dashboard');
-  };
-
   const handleDeleteProject = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (user && !isAnonymous) {
@@ -582,7 +572,6 @@ function AppContent() {
       {showSettings && (
         <SettingsModal
           onClose={() => setShowSettings(false)}
-          onResetData={handleResetData}
         />
       )}
 
