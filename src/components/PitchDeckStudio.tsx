@@ -40,6 +40,10 @@ interface PitchDeckStudioProps {
   onOpenHistory: () => void;
   onOpenExport: () => void;
   onOpenPresentation: () => void;
+  onOpenChallenge?: () => void;
+  onOpenBeforeAfter?: () => void;
+  onRunAutonomousImprove?: () => void;
+  isImprovingDeck?: boolean;
   isLoadingScore: boolean;
   isLoadingCritique: boolean;
 }
@@ -52,6 +56,10 @@ export const PitchDeckStudio: React.FC<PitchDeckStudioProps> = ({
   onOpenHistory,
   onOpenExport,
   onOpenPresentation,
+  onOpenChallenge,
+  onOpenBeforeAfter,
+  onRunAutonomousImprove,
+  isImprovingDeck = false,
   isLoadingScore,
   isLoadingCritique,
 }) => {
@@ -176,37 +184,93 @@ export const PitchDeckStudio: React.FC<PitchDeckStudioProps> = ({
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Present Button */}
+          {/* 60-Second Investor Test */}
           <button
-            onClick={onOpenPresentation}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-200 transition-all active:scale-95"
+            onClick={onOpenCritique}
+            disabled={isLoadingCritique}
+            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-amber-500 hover:from-rose-400 hover:to-amber-400 text-zinc-950 px-3.5 py-2 text-xs font-bold shadow-md shadow-rose-500/20 transition-all active:scale-95 disabled:opacity-50"
+            title="Simulate 60-second VC Partner review and partner comments"
           >
-            <Presentation className="h-4 w-4 text-indigo-400" />
-            <span className="hidden sm:inline">Present Fullscreen</span>
+            {isLoadingCritique ? (
+              <RefreshCw className="h-3.5 w-3.5 animate-spin text-zinc-950" />
+            ) : (
+              <ShieldAlert className="h-3.5 w-3.5 text-zinc-950" />
+            )}
+            <span>60-Second Test</span>
           </button>
 
           {/* AI Score Button */}
           <button
             onClick={onScorePitch}
             disabled={isLoadingScore}
-            className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-2 text-xs font-semibold text-amber-300 transition-all active:scale-95"
+            className="flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-2 text-xs font-semibold text-amber-300 transition-all active:scale-95"
           >
             {isLoadingScore ? (
-              <RefreshCw className="h-4 w-4 animate-spin text-amber-400" />
+              <RefreshCw className="h-3.5 w-3.5 animate-spin text-amber-400" />
             ) : (
-              <Award className="h-4 w-4 text-amber-400" />
+              <Award className="h-3.5 w-3.5 text-amber-400" />
             )}
             <span>
-              {project.score ? `Score: ${project.score.overallScore}/100` : 'Score Deck'}
+              {project.score ? `Score: ${project.score.overallScore}/100` : 'Scorecard'}
             </span>
+          </button>
+
+          {/* Investor Challenge */}
+          {onOpenChallenge && (
+            <button
+              onClick={onOpenChallenge}
+              className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-200 transition-all active:scale-95"
+              title="Test against hard VC due-diligence questions"
+            >
+              <HelpCircle className="h-3.5 w-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Challenge</span>
+            </button>
+          )}
+
+          {/* Before vs After Comparison */}
+          {onOpenBeforeAfter && (
+            <button
+              onClick={onOpenBeforeAfter}
+              className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-200 transition-all active:scale-95"
+              title="Compare initial founder draft against AI revisions"
+            >
+              <Layers className="h-3.5 w-3.5 text-indigo-400" />
+              <span className="hidden sm:inline">Before/After</span>
+            </button>
+          )}
+
+          {/* Revise with AI Investor */}
+          {onRunAutonomousImprove && (
+            <button
+              onClick={onRunAutonomousImprove}
+              disabled={isImprovingDeck}
+              className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 px-3.5 py-2 text-xs font-black shadow-lg shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50"
+              title="Let AI Investor agent identify weak slides, rewrite narrative, and improve quality score"
+            >
+              {isImprovingDeck ? (
+                <RefreshCw className="h-3.5 w-3.5 animate-spin text-zinc-950" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5 text-zinc-950" />
+              )}
+              <span>{isImprovingDeck ? 'Revising...' : 'Revise Deck (AI)'}</span>
+            </button>
+          )}
+
+          {/* Present Button */}
+          <button
+            onClick={onOpenPresentation}
+            className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-200 transition-all active:scale-95"
+          >
+            <Presentation className="h-3.5 w-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">Present</span>
           </button>
 
           {/* Export */}
           <button
             onClick={onOpenExport}
-            className="flex items-center gap-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 px-3 py-2 text-xs font-medium text-white border border-zinc-700 transition-colors"
+            className="flex items-center gap-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 px-3 py-2 text-xs font-medium text-white border border-zinc-700 transition-colors"
           >
-            <Download className="h-4 w-4 text-emerald-400" />
+            <Download className="h-3.5 w-3.5 text-emerald-400" />
             <span>Export</span>
           </button>
         </div>

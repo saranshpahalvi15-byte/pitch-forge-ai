@@ -11,8 +11,11 @@ import {
   Zap,
   TrendingUp,
   RefreshCw,
+  Download,
 } from 'lucide-react';
 import { InvestorCritique, PitchProject } from '../types/pitch';
+import { InvestorDecisionCard } from './InvestorDecisionCard';
+import { InvestorAgentTrace } from './InvestorAgentTrace';
 
 interface InvestorCritiqueViewProps {
   critique: InvestorCritique;
@@ -20,6 +23,9 @@ interface InvestorCritiqueViewProps {
   onImprovePitch: () => void;
   onOpenStudio: () => void;
   onOpenScore: () => void;
+  onOpenExport?: () => void;
+  onOpenChallenge?: () => void;
+  onOpenBeforeAfter?: () => void;
   isImproving: boolean;
 }
 
@@ -29,6 +35,9 @@ export const InvestorCritiqueView: React.FC<InvestorCritiqueViewProps> = ({
   onImprovePitch,
   onOpenStudio,
   onOpenScore,
+  onOpenExport,
+  onOpenChallenge,
+  onOpenBeforeAfter,
   isImproving,
 }) => {
   const getVerdictBadge = (val: string) => {
@@ -55,7 +64,7 @@ export const InvestorCritiqueView: React.FC<InvestorCritiqueViewProps> = ({
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 space-y-8">
-      {/* Header */}
+      {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-6">
         <div>
           <div className="flex items-center gap-2">
@@ -71,26 +80,69 @@ export const InvestorCritiqueView: React.FC<InvestorCritiqueViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={onOpenStudio}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-3.5 py-2 text-xs font-medium text-zinc-300 transition-colors"
+            className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-3.5 py-2 text-xs font-medium text-zinc-300 transition-colors"
           >
             <Layers className="h-3.5 w-3.5" />
-            Pitch Studio
+            <span>Studio</span>
           </button>
+
+          <button
+            onClick={onImprovePitch}
+            disabled={isImproving}
+            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 px-3.5 py-2 text-xs font-black shadow-lg shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+            title="Run Autonomous Multi-Agent Loop to revise target slides and boost investment quality score"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-zinc-950" />
+            <span>{isImproving ? 'Revising...' : 'Revise Deck (AI)'}</span>
+          </button>
+
+          {onOpenExport && (
+            <button
+              onClick={onOpenExport}
+              className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 px-3.5 py-2 text-xs font-bold transition-colors cursor-pointer"
+              title="Download or export pitch deck in PPTX, PDF, or JSON format"
+            >
+              <Download className="h-3.5 w-3.5 text-emerald-400" />
+              <span>Download</span>
+            </button>
+          )}
 
           {project.score && (
             <button
               onClick={onOpenScore}
-              className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 px-3.5 py-2 text-xs font-semibold text-amber-300 transition-colors"
+              className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-3.5 py-2 text-xs font-semibold text-zinc-200 transition-colors cursor-pointer"
             >
               <Award className="h-3.5 w-3.5 text-amber-400" />
-              Scorecard ({project.score.overallScore}/100)
+              <span>Score ({project.score.overallScore}/100)</span>
             </button>
           )}
         </div>
       </div>
+
+      {/* Institutional VC Decision Card */}
+      {project.decision && (
+        <InvestorDecisionCard
+          decision={project.decision}
+          score={project.score}
+          onRunAutonomousImprove={onImprovePitch}
+          onOpenChallenge={onOpenChallenge}
+          isLoadingAgent={isImproving}
+        />
+      )}
+
+      {/* Agent Trace Execution Step (If run) */}
+      {(project.lastAgentResult || isImproving) && (
+        <InvestorAgentTrace
+          result={project.lastAgentResult}
+          isLoading={isImproving}
+          onOpenBeforeAfter={onOpenBeforeAfter}
+          onOpenStudio={onOpenStudio}
+          onOpenExport={onOpenExport}
+        />
+      )}
 
       {/* Hero 60-Second Verdict Card */}
       <div className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 via-zinc-900/80 to-zinc-950 p-6 sm:p-8 shadow-xl space-y-4">
@@ -111,38 +163,6 @@ export const InvestorCritiqueView: React.FC<InvestorCritiqueViewProps> = ({
         <p className="text-sm text-zinc-300 leading-relaxed pt-1">
           {critique.sixtySecondVerdict}
         </p>
-
-        {/* 1-Click Refine Callout */}
-        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
-          <div>
-            <span className="text-xs font-bold text-amber-400 block">
-              Automated Narrative Refinement Engine
-            </span>
-            <p className="text-xs text-zinc-300 mt-0.5">
-              Let Gemini revise weak slides, address unanswered questions, and sharpen investor claims.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={onImprovePitch}
-            disabled={isImproving}
-            className="w-full sm:w-auto shrink-0 flex items-center justify-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold px-6 py-2.5 text-xs sm:text-sm transition-all shadow-lg shadow-amber-500/25 active:scale-95 cursor-pointer"
-          >
-            {isImproving ? (
-              <>
-                <RefreshCw className="h-4 w-4 animate-spin text-zinc-950" />
-                <span>Improving Pitch Deck...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4 stroke-[2.5]" />
-                <span>Improve My Pitch</span>
-                <ArrowRight className="h-4 w-4" />
-              </>
-            )}
-          </button>
-        </div>
       </div>
 
       {/* Grid of Key Findings */}
@@ -219,8 +239,8 @@ export const InvestorCritiqueView: React.FC<InvestorCritiqueViewProps> = ({
         </div>
       </div>
 
-      {/* Bottom CTA Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-zinc-800">
+      {/* Bottom Navigation */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-zinc-800">
         <button
           onClick={onOpenStudio}
           className="text-xs text-zinc-400 hover:text-white"
@@ -228,25 +248,34 @@ export const InvestorCritiqueView: React.FC<InvestorCritiqueViewProps> = ({
           ← Return to Slide Editor
         </button>
 
-        <button
-          type="button"
-          onClick={onImprovePitch}
-          disabled={isImproving}
-          className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold px-8 py-3.5 text-sm transition-all shadow-xl shadow-amber-500/25 active:scale-95 cursor-pointer"
-        >
-          {isImproving ? (
-            <>
-              <RefreshCw className="h-4 w-4 animate-spin text-zinc-950" />
-              <span>Refining 10-Slide Deck...</span>
-            </>
-          ) : (
-            <>
-              <Sparkles className="h-4 w-4 stroke-[2.5]" />
-              <span>Apply AI Investor Revisions</span>
-              <ArrowRight className="h-4 w-4" />
-            </>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={onImprovePitch}
+            disabled={isImproving}
+            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-black px-5 py-3 text-xs sm:text-sm shadow-lg shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+          >
+            <Sparkles className="h-4 w-4 text-zinc-950" />
+            <span>{isImproving ? 'Revising...' : 'Revise Deck (AI)'}</span>
+          </button>
+
+          {onOpenExport && (
+            <button
+              onClick={onOpenExport}
+              className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-bold px-5 py-3 text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer"
+            >
+              <Download className="h-4 w-4 text-emerald-400" />
+              <span>Download Deck</span>
+            </button>
           )}
-        </button>
+
+          <button
+            onClick={onOpenScore}
+            className="flex items-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold px-6 py-3 text-xs sm:text-sm shadow-lg shadow-amber-500/20 active:scale-95"
+          >
+            <span>View Quality Scorecard</span>
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </div>
   );

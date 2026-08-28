@@ -101,6 +101,76 @@ export interface InvestorCritique {
   suggestedRevisionPlan: string[];
 }
 
+export interface InvestorDecision {
+  decision: 'INVEST' | 'WATCHLIST' | 'PASS';
+  confidenceLevel: number; // 0-100%
+  strongestSignal: string;
+  biggestRisk: string;
+  singleMostImportantWeakness: string;
+  weakestScoringDimension: string;
+  responsibleSlideNumbers: number[];
+  evidenceOrChangeNeeded: string;
+  recommendedNextAction: string;
+  bottleneckAnalysis?: string;
+}
+
+export interface AgentImprovementPlan {
+  detectedProblem: string;
+  whyInvestorCares: string;
+  selectedSlideNumbers: number[];
+  intendedChanges: string[];
+  expectedScoringImpact: string;
+}
+
+export interface AgentTraceStep {
+  id: string;
+  timestamp: string;
+  title: string;
+  status: 'completed' | 'in_progress' | 'pending' | 'rejected' | 'failed';
+  detail: string;
+  badge?: string;
+  slideNumbers?: number[];
+}
+
+export interface AutonomousImprovementResult {
+  previousScore: PitchScore;
+  newScore: PitchScore;
+  previousDecision?: InvestorDecision;
+  newDecision?: InvestorDecision;
+  decisionPlan: AgentImprovementPlan;
+  improvedSlides: SlideData[];
+  changedSlideNumbers: number[];
+  whatChanged: string[];
+  revisionAccepted: boolean;
+  scoreDifference: number;
+  outcomeReason: string;
+  traceSteps: AgentTraceStep[];
+}
+
+export interface InvestorChallenge {
+  questionId: string;
+  title?: string;
+  question: string;
+  context: string;
+  category: string;
+  suggestedEvidenceTypes: string[];
+  status?: 'pending' | 'resolved';
+  founderResponse?: string;
+  resolutionSummary?: string;
+}
+
+export interface ChallengeResolutionResult {
+  founderAnswer: string;
+  evaluation: string;
+  updatedSlides: SlideData[];
+  changedSlideNumbers: number[];
+  previousScore: PitchScore;
+  newScore: PitchScore;
+  scoreDifference: number;
+  newDecision?: InvestorDecision;
+  explanation: string;
+}
+
 export interface PitchVersion {
   versionId: string;
   versionNumber: number;
@@ -108,8 +178,11 @@ export interface PitchVersion {
   note: string;
   slides: SlideData[];
   score?: PitchScore;
+  decision?: InvestorDecision;
   critique?: InvestorCritique;
   analysis?: StartupAnalysis;
+  changedSlideNumbers?: number[];
+  whatChanged?: string[];
 }
 
 export interface PitchProject {
@@ -122,7 +195,10 @@ export interface PitchProject {
   currentVersion: number;
   versions: PitchVersion[];
   score?: PitchScore;
+  decision?: InvestorDecision;
   critique?: InvestorCritique;
+  lastAgentResult?: AutonomousImprovementResult;
+  lastChallenge?: InvestorChallenge;
   status: 'draft' | 'analyzed' | 'generated' | 'critiqued' | 'refined';
 }
 

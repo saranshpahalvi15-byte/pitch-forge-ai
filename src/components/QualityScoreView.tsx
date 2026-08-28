@@ -11,8 +11,11 @@ import {
   Target,
   ShieldAlert,
   ArrowUpRight,
+  Download,
 } from 'lucide-react';
 import { PitchScore, PitchProject, CategoryScore } from '../types/pitch';
+import { InvestorDecisionCard } from './InvestorDecisionCard';
+import { InvestorAgentTrace } from './InvestorAgentTrace';
 
 interface QualityScoreViewProps {
   score: PitchScore;
@@ -20,6 +23,11 @@ interface QualityScoreViewProps {
   onOpenCritique: () => void;
   onOpenStudio: () => void;
   onOpenHistory: () => void;
+  onOpenExport?: () => void;
+  onRunAutonomousImprove?: () => void;
+  onOpenChallenge?: () => void;
+  onOpenBeforeAfter?: () => void;
+  isLoadingAgent?: boolean;
 }
 
 export const QualityScoreView: React.FC<QualityScoreViewProps> = ({
@@ -28,6 +36,11 @@ export const QualityScoreView: React.FC<QualityScoreViewProps> = ({
   onOpenCritique,
   onOpenStudio,
   onOpenHistory,
+  onOpenExport,
+  onRunAutonomousImprove,
+  onOpenChallenge,
+  onOpenBeforeAfter,
+  isLoadingAgent = false,
 }) => {
   const getScoreColor = (val: number, max: number) => {
     const pct = val / max;
@@ -69,25 +82,70 @@ export const QualityScoreView: React.FC<QualityScoreViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={onOpenStudio}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-3.5 py-2 text-xs font-medium text-zinc-300 transition-colors"
+            className="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-3.5 py-2 text-xs font-medium text-zinc-300 transition-colors"
           >
             <Layers className="h-3.5 w-3.5" />
-            Back to Studio
+            <span>Studio</span>
           </button>
+
+          {onRunAutonomousImprove && (
+            <button
+              onClick={onRunAutonomousImprove}
+              disabled={isLoadingAgent}
+              className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 px-3.5 py-2 text-xs font-black shadow-lg shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+              title="Run Autonomous Multi-Agent Loop to revise target slides and boost investment quality score"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-zinc-950" />
+              <span>{isLoadingAgent ? 'Revising...' : 'Revise Deck (AI)'}</span>
+            </button>
+          )}
+
+          {onOpenExport && (
+            <button
+              onClick={onOpenExport}
+              className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 px-3.5 py-2 text-xs font-bold transition-colors cursor-pointer"
+              title="Download or export pitch deck in PPTX, PDF, or JSON format"
+            >
+              <Download className="h-3.5 w-3.5 text-emerald-400" />
+              <span>Download</span>
+            </button>
+          )}
 
           <button
             onClick={onOpenCritique}
-            className="flex items-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold px-5 py-2 text-xs sm:text-sm transition-all shadow-lg shadow-amber-500/25 active:scale-95"
+            className="flex items-center gap-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 font-bold px-3.5 py-2 text-xs sm:text-sm transition-all active:scale-95 cursor-pointer"
           >
-            <ShieldAlert className="h-4 w-4" />
-            <span>Open 60-Second Investor Test</span>
-            <ArrowRight className="h-4 w-4" />
+            <ShieldAlert className="h-4 w-4 text-rose-400" />
+            <span>60-Sec Test</span>
+            <ArrowRight className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
+
+      {/* Institutional VC Decision Card */}
+      {project.decision && (
+        <InvestorDecisionCard
+          decision={project.decision}
+          score={project.score}
+          onRunAutonomousImprove={onRunAutonomousImprove}
+          onOpenChallenge={onOpenChallenge}
+          isLoadingAgent={isLoadingAgent}
+        />
+      )}
+
+      {/* Agent Trace Execution Step (If run) */}
+      {(project.lastAgentResult || isLoadingAgent) && (
+        <InvestorAgentTrace
+          result={project.lastAgentResult}
+          isLoading={isLoadingAgent}
+          onOpenBeforeAfter={onOpenBeforeAfter}
+          onOpenStudio={onOpenStudio}
+          onOpenExport={onOpenExport}
+        />
+      )}
 
       {/* Main Score Hero Card */}
       <div className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 via-zinc-900/70 to-zinc-950 p-6 sm:p-8 shadow-xl">
@@ -229,7 +287,7 @@ export const QualityScoreView: React.FC<QualityScoreViewProps> = ({
       </div>
 
       {/* Footer Navigation */}
-      <div className="flex items-center justify-between pt-4 border-t border-zinc-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-zinc-800">
         <button
           onClick={onOpenStudio}
           className="text-xs text-zinc-400 hover:text-white"
@@ -237,13 +295,36 @@ export const QualityScoreView: React.FC<QualityScoreViewProps> = ({
           ← Return to Slide Editor
         </button>
 
-        <button
-          onClick={onOpenCritique}
-          className="flex items-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold px-6 py-3 text-xs sm:text-sm shadow-lg shadow-amber-500/20 active:scale-95"
-        >
-          <span>Run 60-Second Investor Test</span>
-          <ArrowRight className="h-4 w-4" />
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          {onRunAutonomousImprove && (
+            <button
+              onClick={onRunAutonomousImprove}
+              disabled={isLoadingAgent}
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-black px-5 py-3 text-xs sm:text-sm shadow-lg shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+            >
+              <Sparkles className="h-4 w-4 text-zinc-950" />
+              <span>{isLoadingAgent ? 'Revising...' : 'Revise Deck (AI)'}</span>
+            </button>
+          )}
+
+          {onOpenExport && (
+            <button
+              onClick={onOpenExport}
+              className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-bold px-5 py-3 text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer"
+            >
+              <Download className="h-4 w-4 text-emerald-400" />
+              <span>Download Deck</span>
+            </button>
+          )}
+
+          <button
+            onClick={onOpenCritique}
+            className="flex items-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold px-6 py-3 text-xs sm:text-sm shadow-lg shadow-amber-500/20 active:scale-95 cursor-pointer"
+          >
+            <span>Run 60-Second Investor Test</span>
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </div>
   );

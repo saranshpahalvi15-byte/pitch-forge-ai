@@ -9,6 +9,10 @@ import {
   critiquePitch,
   improveSlide,
   improvePitch,
+  evaluateInvestorDecision,
+  runAutonomousImprovementLoop,
+  generateInvestorChallenge,
+  resolveInvestorChallenge,
 } from './server/geminiService.ts';
 
 dotenv.config();
@@ -119,6 +123,66 @@ app.post('/api/improve-pitch', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error in /api/improve-pitch:', error);
     res.status(500).json({ error: error.message || 'Failed to refine pitch.' });
+  }
+});
+
+// 7. Evaluate Investor Decision
+app.post('/api/investor-decision', async (req: Request, res: Response) => {
+  try {
+    const { intake, slides, score, analysis } = req.body;
+    if (!intake || !slides || !score) {
+      return res.status(400).json({ error: 'Intake, slides, and score are required.' });
+    }
+    const decision = await evaluateInvestorDecision(intake, slides, score, analysis);
+    res.json(decision);
+  } catch (error: any) {
+    console.error('Error in /api/investor-decision:', error);
+    res.status(500).json({ error: error.message || 'Failed to evaluate investor decision.' });
+  }
+});
+
+// 8. Closed-Loop Autonomous Investor Improvement Agent
+app.post('/api/autonomous-improve', async (req: Request, res: Response) => {
+  try {
+    const { intake, slides, currentScore, critique, decision, analysis } = req.body;
+    if (!intake || !slides || !currentScore || !critique) {
+      return res.status(400).json({ error: 'Intake, slides, currentScore, and critique are required.' });
+    }
+    const result = await runAutonomousImprovementLoop(intake, slides, currentScore, critique, decision, analysis);
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error in /api/autonomous-improve:', error);
+    res.status(500).json({ error: error.message || 'Failed to run autonomous improvement loop.' });
+  }
+});
+
+// 9. Generate Investor Challenge
+app.post('/api/generate-challenge', async (req: Request, res: Response) => {
+  try {
+    const { intake, slides, score, critique, decision } = req.body;
+    if (!intake || !slides) {
+      return res.status(400).json({ error: 'Intake and slides are required.' });
+    }
+    const challenge = await generateInvestorChallenge(intake, slides, score, critique, decision);
+    res.json(challenge);
+  } catch (error: any) {
+    console.error('Error in /api/generate-challenge:', error);
+    res.status(500).json({ error: error.message || 'Failed to generate investor challenge.' });
+  }
+});
+
+// 10. Resolve Investor Challenge
+app.post('/api/resolve-challenge', async (req: Request, res: Response) => {
+  try {
+    const { intake, slides, currentScore, challenge, founderAnswer, analysis } = req.body;
+    if (!intake || !slides || !currentScore || !challenge || !founderAnswer) {
+      return res.status(400).json({ error: 'Intake, slides, currentScore, challenge, and founderAnswer are required.' });
+    }
+    const result = await resolveInvestorChallenge(intake, slides, currentScore, challenge, founderAnswer, analysis);
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error in /api/resolve-challenge:', error);
+    res.status(500).json({ error: error.message || 'Failed to resolve investor challenge.' });
   }
 });
 

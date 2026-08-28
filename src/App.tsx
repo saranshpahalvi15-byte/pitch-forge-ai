@@ -10,6 +10,8 @@ import {
   SlideData,
   PitchProject,
   PitchVersion,
+  ChallengeResolutionResult,
+  AutonomousImprovementResult,
 } from './types/pitch';
 import {
   saveProject as saveLocalProject,
@@ -21,6 +23,10 @@ import {
   scorePitchApi,
   critiquePitchApi,
   improvePitchApi,
+  evaluateInvestorDecisionApi,
+  autonomousImprovePitchApi,
+  generateInvestorChallengeApi,
+  resolveInvestorChallengeApi,
 } from './services/apiClient';
 import {
   subscribeUserProjects,
@@ -42,6 +48,9 @@ import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { ExportModal } from './components/ExportModal';
 import { SettingsModal } from './components/SettingsModal';
 import { AuthModal } from './components/AuthModal';
+import { InvestorChallengeModal } from './components/InvestorChallengeModal';
+import { BeforeAfterComparisonModal } from './components/BeforeAfterComparisonModal';
+import { AgentRevisionModal } from './components/AgentRevisionModal';
 import { Footer } from './components/Footer';
 
 function AppContent() {
@@ -57,12 +66,17 @@ function AppContent() {
   const [loadingStep, setLoadingStep] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Modals
+  // Modals & Agentic Flow State
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [showPresentation, setShowPresentation] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showChallengeModal, setShowChallengeModal] = useState(false);
+  const [showComparisonModal, setShowComparisonModal] = useState(false);
+  const [showAgentRevisionModal, setShowAgentRevisionModal] = useState(false);
+  const [agentRevisionResult, setAgentRevisionResult] = useState<AutonomousImprovementResult | null>(null);
+  const [isAgentImproving, setIsAgentImproving] = useState(false);
 
   // Synchronize projects strictly for the authenticated user from Firestore
   useEffect(() => {
@@ -201,6 +215,15 @@ function AppContent() {
       setLoadingStep('Evaluating pitch against VC investment committee rubric...');
       const score = await scorePitchApi(activeProject.intake, slides, activeProject.analysis);
 
+      // Evaluate Investor Verdict & Decision
+      setLoadingStep('Simulating Lead VC Partner Investment Committee decision...');
+      let decision = undefined;
+      try {
+        decision = await evaluateInvestorDecisionApi(activeProject.intake, slides, score, activeProject.analysis);
+      } catch (e) {
+        console.warn('Investor decision eval fallback:', e);
+      }
+
       // Create snapshot version 1
       const version1: PitchVersion = {
         versionId: `v1-${Date.now()}`,
@@ -216,6 +239,7 @@ function AppContent() {
         ...activeProject,
         slides,
         score,
+        decision,
         currentVersion: 1,
         versions: [version1],
         status: 'generated',
@@ -253,9 +277,23 @@ function AppContent() {
         activeProject.analysis
       );
 
+      // Evaluate Investor Verdict & Decision
+      let decision = activeProject.decision;
+      try {
+        decision = await evaluateInvestorDecisionApi(
+          activeProject.intake,
+          activeProject.slides,
+          score,
+          activeProject.analysis
+        );
+      } catch (e) {
+        console.warn('Investor decision eval fallback:', e);
+      }
+
       const updatedProject: PitchProject = {
         ...activeProject,
         score,
+        decision,
         updatedAt: new Date().toISOString(),
       };
 
@@ -298,66 +336,152 @@ function AppContent() {
     }
   };
 
-  // 5. Improve My Pitch (Full Multi-Slide Refinement)
-  const handleImprovePitch = async () => {
-    if (!activeProject || !activeProject.critique) return;
-    setIsLoading(true);
-    setLoadingStep('Revising 10 slides to resolve VC critique & unanswered questions...');
+  // 5. Autonomous Agentic Loop: Evaluate -> Decide -> Targeted Improve -> Re-evaluate
+  const handleAutonomousImprove = async () => {
+    if (!activeProject || activeProject.slides.length === 0) return;
+    setIsAgentImproving(true);
+    setShowAgentRevisionModal(true);
+    setAgentRevisionResult(null);
     setErrorMessage(null);
 
     try {
-      const { improvedSlides, improvementLog } = await improvePitchApi(
+      const currentScore = activeProject.score || (await scorePitchApi(activeProject.intake, activeProject.slides, activeProject.analysis));
+      const currentCritique = activeProject.critique || (await critiquePitchApi(activeProject.intake, activeProject.slides));
+      const currentDecision = activeProject.decision;
+
+      const agentResult = await autonomousImprovePitchApi(
         activeProject.intake,
         activeProject.slides,
-        activeProject.critique
-      );
-
-      // Re-score the improved pitch
-      setLoadingStep('Re-evaluating revised pitch quality score...');
-      const newScore = await scorePitchApi(
-        activeProject.intake,
-        improvedSlides,
+        currentScore,
+        currentCritique,
+        currentDecision,
         activeProject.analysis
       );
 
       const nextVersionNum = activeProject.currentVersion + 1;
+      const bottleneckLabel = agentResult.decisionPlan?.detectedProblem || 'Investor Rubric Optimization';
+      const deltaVal = agentResult.scoreDifference || 0;
+
       const newVersion: PitchVersion = {
         versionId: `v${nextVersionNum}-${Date.now()}`,
         versionNumber: nextVersionNum,
         createdAt: new Date().toISOString(),
-        note: `AI Investor Critique Refinements: ${improvementLog[0] || 'Clarified narrative arc'}`,
-        slides: improvedSlides,
-        score: newScore,
-        critique: activeProject.critique,
+        note: `Autonomous Agent Revision: ${bottleneckLabel} (+${deltaVal} pts)`,
+        slides: agentResult.improvedSlides,
+        score: agentResult.newScore,
+        decision: agentResult.newDecision,
+        changedSlideNumbers: agentResult.changedSlideNumbers,
+        whatChanged: agentResult.whatChanged,
         analysis: activeProject.analysis,
       };
 
       const updatedProject: PitchProject = {
         ...activeProject,
-        slides: improvedSlides,
-        score: newScore,
+        slides: agentResult.improvedSlides,
+        score: agentResult.newScore,
+        decision: agentResult.newDecision,
         currentVersion: nextVersionNum,
         versions: [...activeProject.versions, newVersion],
         status: 'refined',
+        lastAgentResult: agentResult,
         updatedAt: new Date().toISOString(),
       };
 
       await persistProject(updatedProject);
       setActiveProject(updatedProject);
-      setCurrentView('score');
+      setAgentRevisionResult(agentResult);
 
-      // Score improvement celebration
       confetti({
-        particleCount: 100,
-        spread: 80,
+        particleCount: 140,
+        spread: 100,
         origin: { y: 0.6 },
       });
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to refine pitch deck.');
+      setErrorMessage(err.message || 'Failed to run autonomous improvement loop.');
     } finally {
-      setIsLoading(false);
-      setLoadingStep('');
+      setIsAgentImproving(false);
     }
+  };
+
+  // 6. Investor Challenge: Open
+  const handleOpenChallenge = () => {
+    if (!activeProject || activeProject.slides.length === 0) return;
+    setShowChallengeModal(true);
+  };
+
+  // 7. Apply Investor Challenge Resolution
+  const handleApplyChallengeResolution = async (result: ChallengeResolutionResult) => {
+    if (!activeProject) return;
+    const nextVersionNum = activeProject.currentVersion + 1;
+    const deltaVal = result.scoreDifference || 0;
+    const challengeTitle = activeProject.lastChallenge?.title || activeProject.lastChallenge?.category || 'Investor Challenge Resolved';
+
+    const newVersion: PitchVersion = {
+      versionId: `v${nextVersionNum}-${Date.now()}`,
+      versionNumber: nextVersionNum,
+      createdAt: new Date().toISOString(),
+      note: `Challenge Resolved: ${challengeTitle} (+${deltaVal} pts)`,
+      slides: result.updatedSlides,
+      score: result.newScore,
+      decision: result.newDecision,
+      changedSlideNumbers: result.changedSlideNumbers,
+      whatChanged: [result.evaluation, result.explanation],
+      analysis: activeProject.analysis,
+    };
+
+    const resolvedChallenge = {
+      ...(activeProject.lastChallenge || {
+        questionId: 'resolved-challenge',
+        question: 'Investor Due Diligence Inquiry',
+        context: 'Evidence provided by founder',
+        category: 'Market & Traction',
+      }),
+      status: 'resolved' as const,
+      resolutionSummary: result.explanation,
+    };
+
+    const updatedProject: PitchProject = {
+      ...activeProject,
+      slides: result.updatedSlides,
+      score: result.newScore,
+      decision: result.newDecision || activeProject.decision,
+      currentVersion: nextVersionNum,
+      versions: [...activeProject.versions, newVersion],
+      lastChallenge: resolvedChallenge,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await persistProject(updatedProject);
+    setActiveProject(updatedProject);
+    setShowChallengeModal(false);
+
+    confetti({
+      particleCount: 120,
+      spread: 90,
+      origin: { y: 0.6 },
+    });
+  };
+
+  // 8. Open Comparison Modal (Before & After)
+  const handleOpenBeforeAfter = () => {
+    if (!activeProject || activeProject.slides.length === 0) return;
+    setShowComparisonModal(true);
+  };
+
+  // 9. Restore Initial Version (V1)
+  const handleRestoreInitialVersion = async () => {
+    if (!activeProject || activeProject.versions.length === 0) return;
+    const v1 = activeProject.versions[0];
+    const updatedProject: PitchProject = {
+      ...activeProject,
+      slides: v1.slides,
+      score: v1.score,
+      decision: v1.decision,
+      updatedAt: new Date().toISOString(),
+    };
+    await persistProject(updatedProject);
+    setActiveProject(updatedProject);
+    setShowComparisonModal(false);
   };
 
   // 6. Update Slides from Studio
@@ -532,6 +656,10 @@ function AppContent() {
             onOpenHistory={() => setShowHistory(true)}
             onOpenExport={() => setShowExport(true)}
             onOpenPresentation={() => setShowPresentation(true)}
+            onOpenChallenge={handleOpenChallenge}
+            onOpenBeforeAfter={handleOpenBeforeAfter}
+            onRunAutonomousImprove={handleAutonomousImprove}
+            isImprovingDeck={isAgentImproving || (isLoading && loadingStep.includes('Autonomous'))}
             isLoadingScore={isLoading && loadingStep.includes('Scoring')}
             isLoadingCritique={isLoading && loadingStep.includes('VC')}
           />
@@ -544,6 +672,11 @@ function AppContent() {
             onOpenCritique={handleCritiquePitch}
             onOpenStudio={() => setCurrentView('studio')}
             onOpenHistory={() => setShowHistory(true)}
+            onOpenExport={() => setShowExport(true)}
+            onRunAutonomousImprove={handleAutonomousImprove}
+            onOpenChallenge={handleOpenChallenge}
+            onOpenBeforeAfter={handleOpenBeforeAfter}
+            isLoadingAgent={isAgentImproving}
           />
         )}
 
@@ -551,10 +684,13 @@ function AppContent() {
           <InvestorCritiqueView
             critique={activeProject.critique}
             project={activeProject}
-            onImprovePitch={handleImprovePitch}
+            onImprovePitch={handleAutonomousImprove}
             onOpenStudio={() => setCurrentView('studio')}
             onOpenScore={() => setCurrentView('score')}
-            isImproving={isLoading && loadingStep.includes('Revising')}
+            onOpenExport={() => setShowExport(true)}
+            onOpenChallenge={handleOpenChallenge}
+            onOpenBeforeAfter={handleOpenBeforeAfter}
+            isImproving={isAgentImproving || (isLoading && loadingStep.includes('Revising')) || (isLoading && loadingStep.includes('Autonomous'))}
           />
         )}
       </main>
@@ -605,6 +741,39 @@ function AppContent() {
             setActiveProject(null);
             setCurrentView('intake');
           }}
+        />
+      )}
+
+      {/* Investor Challenge Due Diligence Modal */}
+      {showChallengeModal && activeProject && (
+        <InvestorChallengeModal
+          project={activeProject}
+          onApplyResolution={handleApplyChallengeResolution}
+          onClose={() => setShowChallengeModal(false)}
+        />
+      )}
+
+      {/* Before / After Slide Diff Comparison Modal */}
+      {showComparisonModal && activeProject && (
+        <BeforeAfterComparisonModal
+          project={activeProject}
+          onClose={() => setShowComparisonModal(false)}
+          onRestoreInitial={handleRestoreInitialVersion}
+        />
+      )}
+
+      {/* Autonomous Multi-Agent Revision Real-Time Execution Modal */}
+      {showAgentRevisionModal && activeProject && (
+        <AgentRevisionModal
+          isOpen={showAgentRevisionModal}
+          onClose={() => setShowAgentRevisionModal(false)}
+          isRunning={isAgentImproving}
+          result={agentRevisionResult}
+          project={activeProject}
+          onOpenBeforeAfter={handleOpenBeforeAfter}
+          onOpenStudio={() => setCurrentView('studio')}
+          onOpenScore={() => setCurrentView('score')}
+          onOpenExport={() => setShowExport(true)}
         />
       )}
     </div>
