@@ -120,18 +120,38 @@ export const BeforeAfterComparisonModal: React.FC<BeforeAfterComparisonModalProp
           </div>
 
           {/* Refined Score Card */}
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 space-y-2">
-            <div className="flex items-center justify-between text-xs text-emerald-400">
-              <span className="font-bold uppercase tracking-wider">Refined Version (V{project.currentVersion})</span>
-              <span className="text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded font-extrabold text-emerald-300">
-                {delta >= 0 ? `+${delta} PTS` : `${delta} PTS`}
+          <div
+            className={`rounded-xl border p-4 space-y-2 ${
+              delta > 0
+                ? 'border-emerald-500/30 bg-emerald-500/10'
+                : delta === 0
+                ? 'border-zinc-700 bg-zinc-900/60'
+                : 'border-rose-500/30 bg-rose-500/10'
+            }`}
+          >
+            <div className="flex items-center justify-between text-xs">
+              <span className={`font-bold uppercase tracking-wider ${delta > 0 ? 'text-emerald-400' : delta === 0 ? 'text-zinc-300' : 'text-rose-400'}`}>
+                Refined Version (V{project.currentVersion})
+              </span>
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded font-extrabold border ${
+                  delta > 0
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : delta === 0
+                    ? 'bg-zinc-800 text-zinc-300 border-zinc-700'
+                    : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                }`}
+              >
+                {delta > 0 ? `+${delta} PTS` : delta === 0 ? '0 PTS (UNCHANGED)' : `${delta} PTS`}
               </span>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-black text-emerald-400">{scoreLatest}</span>
+              <span className={`text-3xl font-black ${delta > 0 ? 'text-emerald-400' : delta === 0 ? 'text-white' : 'text-rose-400'}`}>
+                {scoreLatest}
+              </span>
               <span className="text-xs text-zinc-400 font-bold">/ 100</span>
             </div>
-            <p className="text-xs text-emerald-300 font-semibold">
+            <p className={`text-xs font-semibold ${delta > 0 ? 'text-emerald-300' : delta === 0 ? 'text-zinc-300' : 'text-rose-300'}`}>
               {project.score?.tier || 'Seed Ready'}
             </p>
           </div>

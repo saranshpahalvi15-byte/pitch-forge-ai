@@ -109,8 +109,11 @@ export interface InvestorDecision {
   singleMostImportantWeakness: string;
   weakestScoringDimension: string;
   responsibleSlideNumbers: number[];
-  evidenceOrChangeNeeded: string;
-  recommendedNextAction: string;
+  slideSelectionReason?: string;
+  evidenceGap?: string;
+  expectedImprovementTarget?: string;
+  evidenceOrChangeNeeded?: string;
+  recommendedNextAction?: string;
   bottleneckAnalysis?: string;
 }
 
@@ -118,8 +121,10 @@ export interface AgentImprovementPlan {
   detectedProblem: string;
   whyInvestorCares: string;
   selectedSlideNumbers: number[];
+  slideSelectionReason?: string;
   intendedChanges: string[];
-  expectedScoringImpact: string;
+  expectedScoringImpact?: string;
+  expectedOutcome?: string;
 }
 
 export interface AgentTraceStep {

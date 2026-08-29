@@ -310,8 +310,20 @@ export const AgentRevisionModal: React.FC<AgentRevisionModalProps> = ({
                   <span className="text-[10px] uppercase font-bold text-emerald-400 block">Revised</span>
                   <span className="text-sm font-black text-emerald-400">{result.newScore.overallScore}/100</span>
                 </div>
-                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-md text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                  +{result.scoreDifference} PTS
+                <span
+                  className={`ml-2 inline-flex items-center px-2 py-0.5 rounded-md text-xs font-black border ${
+                    result.scoreDifference > 0
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : result.scoreDifference === 0
+                      ? 'bg-zinc-800 text-zinc-300 border-zinc-700'
+                      : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                  }`}
+                >
+                  {result.scoreDifference > 0
+                    ? `+${result.scoreDifference} PTS`
+                    : result.scoreDifference === 0
+                    ? '0 PTS (UNCHANGED)'
+                    : `${result.scoreDifference} PTS`}
                 </span>
               </div>
             </div>
@@ -331,6 +343,11 @@ export const AgentRevisionModal: React.FC<AgentRevisionModalProps> = ({
                     Slide {result.changedSlideNumbers.join(', ')}
                   </span>
                 </p>
+                {result.decisionPlan?.slideSelectionReason && (
+                  <p className="text-[11px] text-zinc-400 pt-1 border-t border-zinc-800/60">
+                    {result.decisionPlan.slideSelectionReason}
+                  </p>
+                )}
               </div>
 
               <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3 space-y-1.5">

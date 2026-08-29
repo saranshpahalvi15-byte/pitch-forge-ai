@@ -174,6 +174,38 @@ export const InvestorDecisionCard: React.FC<InvestorDecisionCardProps> = ({
             {decision.singleMostImportantWeakness}
           </p>
 
+          {decision.slideSelectionReason && (
+            <div className="rounded-lg bg-zinc-950/70 border border-zinc-800/80 p-3 text-xs text-zinc-300 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 block">
+                Slide Targeting Rationale
+              </span>
+              <p className="text-zinc-300 leading-relaxed">
+                {decision.slideSelectionReason}
+              </p>
+            </div>
+          )}
+
+          {(decision.evidenceGap || decision.expectedImprovementTarget) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+              {decision.evidenceGap && (
+                <div className="rounded-lg bg-zinc-950/50 border border-zinc-800/60 p-2.5 space-y-0.5">
+                  <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider block">
+                    Evidence Gap
+                  </span>
+                  <p className="text-zinc-300 line-clamp-2">{decision.evidenceGap}</p>
+                </div>
+              )}
+              {decision.expectedImprovementTarget && (
+                <div className="rounded-lg bg-zinc-950/50 border border-zinc-800/60 p-2.5 space-y-0.5">
+                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">
+                    Target Outcome
+                  </span>
+                  <p className="text-zinc-300 line-clamp-2">{decision.expectedImprovementTarget}</p>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="pt-2 border-t border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
             <span className="text-zinc-400">
               <strong className="text-zinc-200">Evidence Needed:</strong> {decision.evidenceOrChangeNeeded}

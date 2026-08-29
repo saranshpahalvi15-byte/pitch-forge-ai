@@ -340,6 +340,215 @@ ${analysis ? `Strategic Analysis Context:\nRisks: ${analysis.criticalRisks.join(
   }
 }
 
+export const SCORING_FRAMEWORK_SPEC = {
+  problemClarity: { name: 'Problem Clarity', maxScore: 15, defaultScore: 11 },
+  solutionClarity: { name: 'Solution Clarity', maxScore: 15, defaultScore: 11 },
+  marketOpportunity: { name: 'Market Sizing & TAM', maxScore: 15, defaultScore: 10 },
+  businessModel: { name: 'Business Model', maxScore: 10, defaultScore: 7 },
+  differentiation: { name: 'Moat & Differentiation', maxScore: 15, defaultScore: 10 },
+  tractionValidation: { name: 'Traction & Evidence', maxScore: 10, defaultScore: 6 },
+  goToMarket: { name: 'Go-To-Market Loop', maxScore: 10, defaultScore: 7 },
+  storytellingCoherence: { name: 'Storytelling Arc', maxScore: 10, defaultScore: 8 },
+} as const;
+
+export function deriveTierFromScore(overallScore: number): 'Needs Validation' | 'Pre-Seed Ready' | 'Seed Ready' | 'Series A Contender' {
+  if (overallScore >= 85) return 'Series A Contender';
+  if (overallScore >= 75) return 'Seed Ready';
+  if (overallScore >= 60) return 'Pre-Seed Ready';
+  return 'Needs Validation';
+}
+
+/**
+ * Validates, bounds, and normalizes scoring output.
+ * Guarantees that:
+ * 1. Category scores are strictly within [0, maxScore]
+ * 2. overallScore strictly equals the sum of the 8 category scores (0-100)
+ * 3. tier matches the overall score band
+ * 4. strengths, weaknesses, topImprovements are valid arrays
+ */
+export function validateAndNormalizeScore(
+  rawScore: any,
+  fallbackIntake?: StartupIntake,
+  fallbackSlides?: SlideData[]
+): PitchScore {
+  const categoriesObj: any = {};
+  let computedSum = 0;
+  const rawCats = rawScore?.categories || {};
+
+  for (const [key, spec] of Object.entries(SCORING_FRAMEWORK_SPEC)) {
+    const rawCat = rawCats[key];
+    let scoreVal = typeof rawCat?.score === 'number' ? Math.round(rawCat.score) : spec.defaultScore;
+    if (isNaN(scoreVal)) scoreVal = spec.defaultScore;
+    // Strictly clamp within [0, maxScore]
+    scoreVal = Math.max(0, Math.min(spec.maxScore, scoreVal));
+
+    const feedbackVal =
+      typeof rawCat?.feedback === 'string' && rawCat.feedback.trim().length > 0
+        ? rawCat.feedback.trim()
+        : `Evaluated ${spec.name} against institutional VC criteria for early-stage investment readiness.`;
+
+    categoriesObj[key] = {
+      name: typeof rawCat?.name === 'string' && rawCat.name.trim().length > 0 ? rawCat.name : spec.name,
+      score: scoreVal,
+      maxScore: spec.maxScore,
+      feedback: feedbackVal,
+    };
+
+    computedSum += scoreVal;
+  }
+
+  // The overallScore MUST equal the mathematical sum of all category scores
+  const normalizedOverall = computedSum;
+  const derivedTier = deriveTierFromScore(normalizedOverall);
+
+  const rawStrengths = Array.isArray(rawScore?.strengths)
+    ? rawScore.strengths.filter((s: any) => typeof s === 'string' && s.trim().length > 0)
+    : [];
+  const rawWeaknesses = Array.isArray(rawScore?.weaknesses)
+    ? rawScore.weaknesses.filter((w: any) => typeof w === 'string' && w.trim().length > 0)
+    : [];
+  const rawTopImprovements = Array.isArray(rawScore?.topImprovements)
+    ? rawScore.topImprovements.filter((i: any) => typeof i === 'string' && i.trim().length > 0)
+    : [];
+
+  const strengths =
+    rawStrengths.length > 0
+      ? rawStrengths
+      : [
+          'Crisp 1-second takeaway headlines enabling rapid executive scanning.',
+          'Clear core problem articulation addressing high customer friction.',
+          'Transparent distinction between verified milestones and modeled assumptions.',
+        ];
+
+  const weaknesses =
+    rawWeaknesses.length > 0
+      ? rawWeaknesses
+      : [
+          'Traction claims and unit economics require more concrete pilot evidence.',
+          'Defensibility against well-capitalized incumbents should be articulated more sharply.',
+        ];
+
+  const topImprovements =
+    rawTopImprovements.length > 0
+      ? rawTopImprovements
+      : [
+          'Provide quantified customer proof points on traction slides.',
+          'Ground bottom-up unit economics to prove scalable margin expansion.',
+        ];
+
+  return {
+    overallScore: normalizedOverall,
+    tier: derivedTier,
+    categories: categoriesObj as PitchScore['categories'],
+    strengths,
+    weaknesses,
+    topImprovements,
+  };
+}
+
+/**
+ * Validates, bounds, and normalizes slide selection for investor improvements.
+ * Enforces:
+ * 1. 1 to 4 slides selected
+ * 2. Every slide number must exist in the deck
+ * 3. No duplicates or invalid indices
+ * 4. Fallback deterministic mapping when AI returns invalid/empty selections
+ * 5. Concise, user-facing slideSelectionReason without chain-of-thought
+ */
+export function validateAndNormalizeSlideSelection(
+  rawSlideNumbers: any,
+  weakestDimension: string,
+  slides: SlideData[],
+  customReason?: string
+): { validatedSlideNumbers: number[]; slideSelectionReason: string } {
+  const existingSlideNums = new Set(slides.map((s) => s.slideNumber));
+
+  let parsedNums: number[] = [];
+  if (Array.isArray(rawSlideNumbers)) {
+    for (const item of rawSlideNumbers) {
+      const num = typeof item === 'number' ? Math.floor(item) : parseInt(String(item), 10);
+      if (!isNaN(num) && existingSlideNums.has(num)) {
+        if (!parsedNums.includes(num)) {
+          parsedNums.push(num);
+        }
+      }
+    }
+  }
+
+  // Cap at 1-4 slides maximum
+  if (parsedNums.length > 4) {
+    parsedNums = parsedNums.slice(0, 4);
+  }
+
+  // If no valid slides were provided, use deterministic fallback mapping based on weakest dimension
+  if (parsedNums.length === 0) {
+    const dim = (weakestDimension || '').toLowerCase();
+    const findCategorySlides = (cat: string): number[] =>
+      slides.filter((s) => s.category.toLowerCase().includes(cat)).map((s) => s.slideNumber);
+
+    if (dim.includes('tract') || dim.includes('valid') || dim.includes('proof')) {
+      const tractSlides = findCategorySlides('traction');
+      parsedNums = tractSlides.length > 0 ? tractSlides : [8, 9].filter((n) => existingSlideNums.has(n));
+    } else if (dim.includes('diff') || dim.includes('moat') || dim.includes('compet')) {
+      const moatSlides = findCategorySlides('competition');
+      parsedNums = moatSlides.length > 0 ? moatSlides : [7].filter((n) => existingSlideNums.has(n));
+    } else if (dim.includes('market') || dim.includes('tam') || dim.includes('size')) {
+      const marketSlides = findCategorySlides('market');
+      parsedNums = marketSlides.length > 0 ? marketSlides : [4].filter((n) => existingSlideNums.has(n));
+    } else if (dim.includes('business') || dim.includes('model') || dim.includes('revenue') || dim.includes('monet')) {
+      const bizSlides = findCategorySlides('business_model');
+      parsedNums = bizSlides.length > 0 ? bizSlides : [6].filter((n) => existingSlideNums.has(n));
+    } else if (dim.includes('problem')) {
+      const probSlides = findCategorySlides('problem');
+      parsedNums = probSlides.length > 0 ? probSlides : [2].filter((n) => existingSlideNums.has(n));
+    } else if (dim.includes('solution') || dim.includes('product')) {
+      const solSlides = [...findCategorySlides('solution'), ...findCategorySlides('product')];
+      parsedNums = solSlides.length > 0 ? solSlides : [3, 5].filter((n) => existingSlideNums.has(n));
+    } else if (dim.includes('gtm') || dim.includes('go-to') || dim.includes('distribution')) {
+      const gtmSlides = findCategorySlides('gtm');
+      parsedNums = gtmSlides.length > 0 ? gtmSlides : [9].filter((n) => existingSlideNums.has(n));
+    } else {
+      parsedNums = [8, 9].filter((n) => existingSlideNums.has(n));
+    }
+
+    if (parsedNums.length === 0) {
+      parsedNums = slides.slice(0, Math.min(2, slides.length)).map((s) => s.slideNumber);
+    }
+    parsedNums = parsedNums.slice(0, 4);
+  }
+
+  const getTopic = (d: string) => {
+    const dl = d.toLowerCase();
+    if (dl.includes('tract') || dl.includes('valid')) return 'validation evidence and early pilot traction';
+    if (dl.includes('diff') || dl.includes('moat') || dl.includes('compet')) return 'defensible moat and competitive positioning';
+    if (dl.includes('market') || dl.includes('tam')) return 'market sizing and bottom-up expansion potential';
+    if (dl.includes('business') || dl.includes('revenue')) return 'monetization mechanics and unit economics';
+    if (dl.includes('problem')) return 'core customer friction and pain point urgency';
+    if (dl.includes('solution') || dl.includes('product')) return 'product workflow and core value proposition';
+    if (dl.includes('gtm') || dl.includes('go-to')) return 'customer acquisition loops and go-to-market channels';
+    return 'key proof points and narrative thesis';
+  };
+
+  let slideSelectionReason = '';
+  const sanitizedReason = (customReason || '').trim();
+  if (
+    sanitizedReason.length >= 15 &&
+    !sanitizedReason.toLowerCase().includes('thinking') &&
+    !sanitizedReason.toLowerCase().includes('thought:')
+  ) {
+    slideSelectionReason = sanitizedReason;
+  } else {
+    const slideLabels = parsedNums.map((n) => `Slide ${n}`).join(parsedNums.length === 2 ? ' and ' : ', ');
+    const isPlural = parsedNums.length > 1;
+    slideSelectionReason = `${weakestDimension || 'Traction & Evidence'} is the primary investor bottleneck, so ${slideLabels} ${isPlural ? 'were' : 'was'} selected because ${isPlural ? 'they contain' : 'it contains'} the startup's ${getTopic(weakestDimension || '')}.`;
+  }
+
+  return {
+    validatedSlideNumbers: parsedNums,
+    slideSelectionReason,
+  };
+}
+
 /**
  * 3. Calculate AI Pitch Quality Score (out of 100)
  */
@@ -363,13 +572,13 @@ Startup: ${intake.startupName} (${intake.stage})
 Slides:
 ${slides.map(s => `Slide ${s.slideNumber}: ${s.title}\nHeadline: ${s.headline}\nBullets: ${s.bullets.join(' | ')}\nData: ${JSON.stringify(s.keyDataPoints)}`).join('\n\n')}
 
-Provide constructive, realistic scoring suitable for a serious VC review.`;
+Provide constructive, realistic scoring suitable for a serious VC review. Ensure category scores accurately reflect the pitch content and sum to the overall score.`;
 
   try {
     const text = await callGeminiWithRetry({
       contents: prompt,
       config: {
-        systemInstruction: 'You are a rigorous VC investment committee member evaluating pitch decks.',
+        systemInstruction: 'You are a rigorous VC investment committee member evaluating pitch decks. Maintain strict mathematical consistency where overall score equals the sum of category scores.',
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -492,10 +701,11 @@ Provide constructive, realistic scoring suitable for a serious VC review.`;
       },
     });
 
-    return JSON.parse(text) as PitchScore;
+    const parsed = JSON.parse(text);
+    return validateAndNormalizeScore(parsed, intake, slides);
   } catch (error) {
     console.error('Gemini error in scorePitch, falling back to heuristic scoring:', error);
-    return fallbackScorePitch(intake, slides);
+    return validateAndNormalizeScore(fallbackScorePitch(intake, slides), intake, slides);
   }
 }
 
@@ -815,7 +1025,7 @@ Startup Information:
 - Business Model: ${intake.businessModel || intake.revenueModel}
 - Competitors & Moat: ${intake.competitors || 'None'} / ${intake.competitiveAdvantage || 'None'}
 
-Current 10 Slides Snapshot:
+Current ${slides.length} Slides Snapshot:
 ${slides.map((s) => `[Slide ${s.slideNumber}: ${s.title}] (${s.category})
 Headline: "${s.headline}"
 Key Points: ${s.bullets.slice(0, 2).join('; ')}
@@ -825,8 +1035,9 @@ EVALUATION MANDATES:
 1. Determine decision: "INVEST" (high conviction, score >= 80, clear moat & urgency), "WATCHLIST" (promising problem/solution but unproven traction or defensibility, score 65-79), or "PASS" (score < 65, missing vital unit economics or ambiguous value proposition).
 2. NEVER fabricate traction, revenue, customer logos, or growth metrics.
 3. Clearly identify the single biggest investment signal and biggest risk.
-4. Pinpoint the weakest scoring dimension and list the exact slide number(s) (1 to 10) primarily responsible for that bottleneck.
-5. Provide actionable evidence or narrative changes that would upgrade the decision.`;
+4. Pinpoint the weakest scoring dimension and select 1 to 4 specific slide number(s) (1 to ${slides.length}) that directly reflect or cause this bottleneck based on actual pitch content.
+5. Provide a concise user-facing slideSelectionReason (do NOT expose chain-of-thought).
+6. Specify the evidenceGap and expectedImprovementTarget qualitatively without promising numeric score increases.`;
 
   try {
     const text = await callGeminiWithRetry({
@@ -860,12 +1071,24 @@ EVALUATION MANDATES:
             },
             weakestScoringDimension: {
               type: Type.STRING,
-              description: 'e.g. Traction / Validation, Differentiation & Moat, Market Opportunity, Business Model, Problem Clarity, Go-To-Market',
+              description: 'e.g. Traction & Evidence, Moat & Differentiation, Market Sizing & TAM, Business Model, Problem Clarity, Go-To-Market Loop',
             },
             responsibleSlideNumbers: {
               type: Type.ARRAY,
               items: { type: Type.INTEGER },
-              description: 'Array of slide numbers (1-10) that directly reflect or cause this bottleneck',
+              description: 'Array of 1 to 4 slide numbers that directly cause this bottleneck',
+            },
+            slideSelectionReason: {
+              type: Type.STRING,
+              description: 'Concise user-facing explanation of why these specific slides were chosen based on pitch content',
+            },
+            evidenceGap: {
+              type: Type.STRING,
+              description: 'Specific missing validation, unit economics, or market evidence',
+            },
+            expectedImprovementTarget: {
+              type: Type.STRING,
+              description: 'Qualitative target for what evidence or narrative clarity is required',
             },
             evidenceOrChangeNeeded: {
               type: Type.STRING,
@@ -888,6 +1111,9 @@ EVALUATION MANDATES:
             'singleMostImportantWeakness',
             'weakestScoringDimension',
             'responsibleSlideNumbers',
+            'slideSelectionReason',
+            'evidenceGap',
+            'expectedImprovementTarget',
             'evidenceOrChangeNeeded',
             'recommendedNextAction',
           ],
@@ -905,20 +1131,28 @@ EVALUATION MANDATES:
         ? 'WATCHLIST'
         : 'PASS';
 
+    const weakestDim = parsed.weakestScoringDimension || 'Traction & Evidence';
+    const { validatedSlideNumbers, slideSelectionReason } = validateAndNormalizeSlideSelection(
+      parsed.responsibleSlideNumbers,
+      weakestDim,
+      slides,
+      parsed.slideSelectionReason
+    );
+
     return {
       decision: validDecision,
       confidenceLevel: Math.min(100, Math.max(10, parsed.confidenceLevel || score.overallScore)),
       strongestSignal: parsed.strongestSignal || score.strengths[0] || 'Clear problem statement and market focus.',
       biggestRisk: parsed.biggestRisk || 'Defensibility and customer acquisition scaling risk.',
       singleMostImportantWeakness: parsed.singleMostImportantWeakness || score.weaknesses[0] || 'Traction validation is early.',
-      weakestScoringDimension: parsed.weakestScoringDimension || 'Traction / Validation',
-      responsibleSlideNumbers:
-        Array.isArray(parsed.responsibleSlideNumbers) && parsed.responsibleSlideNumbers.length > 0
-          ? parsed.responsibleSlideNumbers.filter((n: number) => n >= 1 && n <= 10)
-          : [8, 9],
+      weakestScoringDimension: weakestDim,
+      responsibleSlideNumbers: validatedSlideNumbers,
+      slideSelectionReason,
+      evidenceGap: parsed.evidenceGap || 'Missing quantifiable pilot conversion metrics or customer discovery data.',
+      expectedImprovementTarget: parsed.expectedImprovementTarget || 'Ground key assumptions into validated milestones with explicit verification criteria.',
       evidenceOrChangeNeeded: parsed.evidenceOrChangeNeeded || 'Demonstrate measurable pilot customer engagement and quantified ROI.',
-      recommendedNextAction: parsed.recommendedNextAction || 'Run targeted autonomous improvement on traction & GTM slides.',
-      bottleneckAnalysis: parsed.bottleneckAnalysis || `The investment case is currently bottlenecked by ${parsed.weakestScoringDimension || 'unvalidated traction assumptions'}.`,
+      recommendedNextAction: parsed.recommendedNextAction || `Run targeted autonomous improvement on Slide(s) ${validatedSlideNumbers.join(', ')}.`,
+      bottleneckAnalysis: parsed.bottleneckAnalysis || `The investment case is currently bottlenecked by ${weakestDim}.`,
     };
   } catch (error) {
     console.error('Gemini error in evaluateInvestorDecision, applying heuristic decision model:', error);
@@ -953,7 +1187,7 @@ export async function runAutonomousImprovementLoop(
 
   // Step 2: Evaluate Bottleneck & Weakness
   const resolvedDecision = decision || (await evaluateInvestorDecision(intake, currentSlides, currentScore, analysis));
-  const weakestDimension = resolvedDecision.weakestScoringDimension || 'Traction / Validation';
+  const weakestDimension = resolvedDecision.weakestScoringDimension || 'Traction & Evidence';
 
   traceSteps.push({
     id: 'step-2',
@@ -964,31 +1198,26 @@ export async function runAutonomousImprovementLoop(
     badge: resolvedDecision.decision,
   });
 
-  // Step 3: Autonomously Determine Target Slides
-  let selectedSlideNumbers = resolvedDecision.responsibleSlideNumbers?.filter((n) => n >= 1 && n <= 10) || [];
-  if (!selectedSlideNumbers || selectedSlideNumbers.length === 0) {
-    const dimLower = weakestDimension.toLowerCase();
-    if (dimLower.includes('tract') || dimLower.includes('valid')) selectedSlideNumbers = [8, 9];
-    else if (dimLower.includes('diff') || dimLower.includes('moat') || dimLower.includes('compet')) selectedSlideNumbers = [7];
-    else if (dimLower.includes('market') || dimLower.includes('tam') || dimLower.includes('size')) selectedSlideNumbers = [4];
-    else if (dimLower.includes('business') || dimLower.includes('model') || dimLower.includes('monet')) selectedSlideNumbers = [6];
-    else if (dimLower.includes('problem')) selectedSlideNumbers = [2];
-    else if (dimLower.includes('solution') || dimLower.includes('product')) selectedSlideNumbers = [3, 5];
-    else if (dimLower.includes('gtm') || dimLower.includes('go-to')) selectedSlideNumbers = [9];
-    else selectedSlideNumbers = [8, 9];
-  }
+  // Step 3: Autonomously Determine Target Slides with Server-Side Validation
+  const { validatedSlideNumbers: selectedSlideNumbers, slideSelectionReason } =
+    validateAndNormalizeSlideSelection(
+      resolvedDecision.responsibleSlideNumbers,
+      weakestDimension,
+      currentSlides,
+      resolvedDecision.slideSelectionReason
+    );
 
   traceSteps.push({
     id: 'step-3',
     timestamp: getNow(),
     title: 'Select Target Slides for Revision',
     status: 'completed',
-    detail: `Autonomously mapped bottleneck "${weakestDimension}" to Slide(s) ${selectedSlideNumbers.join(', ')}. Remaining slides preserved to maintain narrative stability.`,
+    detail: slideSelectionReason,
     badge: `Slides ${selectedSlideNumbers.join(', ')}`,
     slideNumbers: selectedSlideNumbers,
   });
 
-  // Step 4: Formulate Autonomous Improvement Strategy with Gemini
+  // Step 4: Formulate Autonomous Improvement Strategy with Gemini (No artificial score expectation bias)
   const strategyPrompt = `You are the lead investor improvement engine in an Agentic AI system.
 Formulate a precise, selective revision strategy for startup "${intake.startupName}".
 
@@ -997,6 +1226,8 @@ Weakness Detail: ${resolvedDecision.singleMostImportantWeakness}
 Target Slides: ${selectedSlideNumbers.join(', ')}
 Critique Risk: ${critique.biggestInvestmentRisk}
 Unanswered Question: ${critique.biggestUnansweredQuestion}
+Evidence Gap: ${resolvedDecision.evidenceGap || 'Unvalidated traction and unit economics'}
+Target Outcome: ${resolvedDecision.expectedImprovementTarget || 'Ground assumptions in verifiable proof'}
 
 Target Slides Content:
 ${currentSlides
@@ -1006,7 +1237,8 @@ ${currentSlides
 
 MANDATES:
 - Create a structured improvement plan explaining why investors care and what precise changes to make.
-- NEVER fabricate revenue or fake numbers.
+- Describe the expected outcome qualitatively and evidence-based. NEVER state or imply a predetermined numeric score increase (e.g. do NOT promise '+15 points').
+- NEVER fabricate revenue, customer logos, or fake numbers.
 - Provide the improved versions of ONLY the selected slides (${selectedSlideNumbers.join(', ')}).
 - Make the 1-second headlines high-conviction, eliminate fluff, add concrete proof requirements, and tighten unit economic / differentiation logic.`;
 
@@ -1014,12 +1246,14 @@ MANDATES:
     detectedProblem: resolvedDecision.singleMostImportantWeakness || 'Unvalidated traction and vague distribution economics.',
     whyInvestorCares: 'Investors discount early-stage valuations by 50%+ when validation claims lack concrete evidence or clear wedge mechanics.',
     selectedSlideNumbers,
+    slideSelectionReason,
     intendedChanges: [
-      `Ground Slide(s) ${selectedSlideNumbers.join(', ')} in quantifiable customer proof.`,
+      `Ground Slide(s) ${selectedSlideNumbers.join(', ')} in verifiable validation criteria.`,
       `Sharpen 1-second takeaway headline to eliminate ambiguity.`,
       `Clarify unit economics and defensibility against incumbents.`,
     ],
-    expectedScoringImpact: `Strengthen ${weakestDimension} from baseline by +10 to +20 points.`,
+    expectedScoringImpact: `Expected outcome: strengthen the ${weakestDimension} narrative by grounding claims in verifiable evidence.`,
+    expectedOutcome: `Strengthen the ${weakestDimension} narrative by grounding claims in verifiable evidence.`,
   };
 
   let selectivelyImprovedSlides = [...currentSlides];
@@ -1030,7 +1264,7 @@ MANDATES:
       contents: strategyPrompt,
       config: {
         systemInstruction:
-          'You are an expert autonomous investor agent. You plan and execute high-precision pitch slide upgrades without hallucinating metrics.',
+          'You are an expert autonomous investor agent. You plan and execute high-precision pitch slide upgrades without hallucinating metrics or promising artificial score increases.',
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -1048,9 +1282,12 @@ MANDATES:
                   type: Type.ARRAY,
                   items: { type: Type.STRING },
                 },
-                expectedScoringImpact: { type: Type.STRING },
+                expectedOutcome: {
+                  type: Type.STRING,
+                  description: 'Qualitative, evidence-based description of the expected narrative improvement',
+                },
               },
-              required: ['detectedProblem', 'whyInvestorCares', 'selectedSlideNumbers', 'intendedChanges', 'expectedScoringImpact'],
+              required: ['detectedProblem', 'whyInvestorCares', 'selectedSlideNumbers', 'intendedChanges', 'expectedOutcome'],
             },
             revisedSlides: {
               type: Type.ARRAY,
@@ -1109,8 +1346,13 @@ MANDATES:
     const result = JSON.parse(strategyResponse);
     if (result.plan) {
       decisionPlan = {
-        ...result.plan,
+        detectedProblem: result.plan.detectedProblem || decisionPlan.detectedProblem,
+        whyInvestorCares: result.plan.whyInvestorCares || decisionPlan.whyInvestorCares,
         selectedSlideNumbers,
+        slideSelectionReason,
+        intendedChanges: result.plan.intendedChanges || decisionPlan.intendedChanges,
+        expectedScoringImpact: result.plan.expectedOutcome || decisionPlan.expectedScoringImpact,
+        expectedOutcome: result.plan.expectedOutcome || decisionPlan.expectedOutcome,
       };
     }
     whatChanged = result.whatChanged || [
@@ -1118,14 +1360,16 @@ MANDATES:
       `Sharpened ${weakestDimension} narrative with verifiable evidence requirements.`,
     ];
 
-    // Merge revised slides selectively
+    // Merge revised slides selectively — only modify targeted slides
     const revisedMap = new Map<number, SlideData>();
     for (const s of result.revisedSlides || []) {
-      revisedMap.set(s.slideNumber, {
-        ...s,
-        id: s.slideNumber,
-        isEdited: true,
-      });
+      if (selectedSlideNumbers.includes(s.slideNumber)) {
+        revisedMap.set(s.slideNumber, {
+          ...s,
+          id: s.slideNumber,
+          isEdited: true,
+        });
+      }
     }
 
     selectivelyImprovedSlides = currentSlides.map((original) => {
@@ -1167,31 +1411,35 @@ MANDATES:
   // Step 6: Re-Evaluate Investor Decision
   const newDecision = await evaluateInvestorDecision(intake, selectivelyImprovedSlides, newScore, analysis);
 
-  // Step 7: Decide Acceptance
-  const revisionAccepted = scoreDiff >= 0;
-  const outcomeReason =
-    revisionAccepted
-      ? scoreDiff > 0
-        ? `Improvement accepted: Investment readiness increased from ${currentScore.overallScore}/100 to ${newScore.overallScore}/100 (+${scoreDiff} pts).`
-        : `Improvement maintained baseline: Score held steady at ${newScore.overallScore}/100 with refined narrative clarity.`
-      : `Revision rejected: Score decreased from ${currentScore.overallScore}/100 to ${newScore.overallScore}/100 (${scoreDiff} pts). Insufficient evidence to justify upgrade.`;
+  // Step 7: Acceptance Logic: scoreDiff > 0 (Accepted), scoreDiff === 0 (No measurable improvement), scoreDiff < 0 (Rejected)
+  const revisionAccepted = scoreDiff > 0;
+  let outcomeReason: string;
+
+  if (scoreDiff > 0) {
+    outcomeReason = `Improvement accepted: investor readiness increased by ${scoreDiff} point${scoreDiff === 1 ? '' : 's'} (from ${currentScore.overallScore}/100 to ${newScore.overallScore}/100).`;
+  } else if (scoreDiff === 0) {
+    outcomeReason = `No measurable improvement: the revised pitch did not improve the investor score (held steady at ${newScore.overallScore}/100), so the baseline version remains preferred.`;
+  } else {
+    const drop = Math.abs(scoreDiff);
+    outcomeReason = `Revision rejected: investor readiness decreased by ${drop} point${drop === 1 ? '' : 's'} (from ${currentScore.overallScore}/100 to ${newScore.overallScore}/100).`;
+  }
 
   traceSteps[traceSteps.length - 1] = {
     id: 'step-5',
     timestamp: getNow(),
     title: 'Re-Evaluate Pitch Quality',
     status: 'completed',
-    detail: `Score evaluation complete: ${currentScore.overallScore}/100 → ${newScore.overallScore}/100 (${scoreDiff >= 0 ? `+${scoreDiff}` : scoreDiff} pts).`,
+    detail: `Score evaluation complete: ${currentScore.overallScore}/100 → ${newScore.overallScore}/100 (${scoreDiff > 0 ? `+${scoreDiff}` : scoreDiff} pts).`,
     badge: `${currentScore.overallScore} → ${newScore.overallScore}`,
   };
 
   traceSteps.push({
     id: 'step-6',
     timestamp: getNow(),
-    title: revisionAccepted ? 'Autonomous Improvement Accepted' : 'Autonomous Revision Rejected',
-    status: revisionAccepted ? 'completed' : 'rejected',
+    title: scoreDiff > 0 ? 'Improvement Accepted' : scoreDiff === 0 ? 'No Measurable Improvement' : 'Revision Rejected',
+    status: scoreDiff > 0 ? 'completed' : scoreDiff === 0 ? 'completed' : 'rejected',
     detail: outcomeReason,
-    badge: revisionAccepted ? (scoreDiff > 0 ? `+${scoreDiff} Pts` : 'Steady') : `${scoreDiff} Pts`,
+    badge: scoreDiff > 0 ? `+${scoreDiff} PTS` : scoreDiff === 0 ? '0 PTS (UNCHANGED)' : `${scoreDiff} PTS (REJECTED)`,
   });
 
   return {
@@ -1816,6 +2064,13 @@ function fallbackEvaluateInvestorDecision(
 ): InvestorDecision {
   const isInvest = score.overallScore >= 80;
   const isWatchlist = score.overallScore >= 65;
+  const weakestDimension = score.overallScore < 70 ? 'Traction & Evidence' : 'Moat & Differentiation';
+
+  const { validatedSlideNumbers, slideSelectionReason } = validateAndNormalizeSlideSelection(
+    [8, 9],
+    weakestDimension,
+    slides
+  );
 
   return {
     decision: isInvest ? 'INVEST' : isWatchlist ? 'WATCHLIST' : 'PASS',
@@ -1823,10 +2078,13 @@ function fallbackEvaluateInvestorDecision(
     strongestSignal: score.strengths[0] || 'Clear customer problem and direct solution value.',
     biggestRisk: score.weaknesses[0] || 'Customer acquisition cost (CAC) economics and competitive moat.',
     singleMostImportantWeakness: score.weaknesses[0] || 'Traction validation remains primarily modeled.',
-    weakestScoringDimension: score.overallScore < 70 ? 'Traction & Evidence' : 'Moat & Differentiation',
-    responsibleSlideNumbers: [8, 9],
+    weakestScoringDimension: weakestDimension,
+    responsibleSlideNumbers: validatedSlideNumbers,
+    slideSelectionReason,
+    evidenceGap: 'Early-stage assumptions around CAC, retention, or customer willingness-to-pay lack empirical pilot proof.',
+    expectedImprovementTarget: 'Replace speculative projections with validated customer discovery benchmarks and concrete pilot proof.',
     evidenceOrChangeNeeded: 'Provide 3-5 pilot customer quantitative proof points or early cohort retention data.',
-    recommendedNextAction: 'Execute autonomous agent improvement on Slides 8 & 9 to sharpen validation proofs.',
+    recommendedNextAction: `Execute autonomous agent improvement on Slide(s) ${validatedSlideNumbers.join(', ')} to sharpen validation proofs.`,
     bottleneckAnalysis: 'Conviction is bounded by traction assumptions. Upgrading the proof architecture will unlock higher investor interest.',
   };
 }
@@ -1841,16 +2099,25 @@ function fallbackSelectiveImprovement(
   improvedSlides: SlideData[];
   whatChanged: string[];
 } {
+  const { slideSelectionReason } = validateAndNormalizeSlideSelection(
+    selectedSlideNumbers,
+    weakestDimension,
+    currentSlides,
+    decision.slideSelectionReason
+  );
+
   const plan: AgentImprovementPlan = {
     detectedProblem: decision.singleMostImportantWeakness || 'Unvalidated traction and vague distribution economics.',
     whyInvestorCares: 'Investors discount early-stage valuations by 50%+ when claims lack concrete evidence or clear wedge mechanics.',
     selectedSlideNumbers,
+    slideSelectionReason,
     intendedChanges: [
       `Ground Slide(s) ${selectedSlideNumbers.join(', ')} in verifiable unit economics.`,
       `Sharpen 1-second takeaway headline to eliminate ambiguity.`,
       `Clarify defensible moat against fast-following incumbents.`,
     ],
-    expectedScoringImpact: `Strengthen ${weakestDimension} from baseline by +12 to +18 points.`,
+    expectedScoringImpact: `Expected outcome: strengthen the ${weakestDimension} narrative with verifiable evidence requirements.`,
+    expectedOutcome: `Strengthen the ${weakestDimension} narrative with verifiable evidence requirements.`,
   };
 
   const improvedSlides = currentSlides.map((slide) => {

@@ -361,12 +361,13 @@ function AppContent() {
       const nextVersionNum = activeProject.currentVersion + 1;
       const bottleneckLabel = agentResult.decisionPlan?.detectedProblem || 'Investor Rubric Optimization';
       const deltaVal = agentResult.scoreDifference || 0;
+      const formattedDelta = deltaVal > 0 ? `+${deltaVal} pts` : deltaVal === 0 ? '0 pts (unchanged)' : `${deltaVal} pts`;
 
       const newVersion: PitchVersion = {
         versionId: `v${nextVersionNum}-${Date.now()}`,
         versionNumber: nextVersionNum,
         createdAt: new Date().toISOString(),
-        note: `Autonomous Agent Revision: ${bottleneckLabel} (+${deltaVal} pts)`,
+        note: `Autonomous Agent Revision: ${bottleneckLabel} (${formattedDelta})`,
         slides: agentResult.improvedSlides,
         score: agentResult.newScore,
         decision: agentResult.newDecision,
@@ -391,11 +392,13 @@ function AppContent() {
       setActiveProject(updatedProject);
       setAgentRevisionResult(agentResult);
 
-      confetti({
-        particleCount: 140,
-        spread: 100,
-        origin: { y: 0.6 },
-      });
+      if (agentResult.revisionAccepted) {
+        confetti({
+          particleCount: 140,
+          spread: 100,
+          origin: { y: 0.6 },
+        });
+      }
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to run autonomous improvement loop.');
     } finally {
